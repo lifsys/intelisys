@@ -100,13 +100,11 @@ Intelisys supports a variety of AI models:
 - Groq: groq-llama, groq-fast
 - MistralAI: mistral-large
 
-## New in Version 0.2.3
+## New in Version 0.2.4
 
-- Updated codebase for PyPI release
-- Improved documentation in README.md
-- Ensured version consistency across all files
-- Enhanced error handling and logging
-- Improved compatibility with the latest versions of dependent libraries
+- Prepared package for PyPI update
+- Updated version number in relevant files
+- Maintained all improvements from version 0.2.3
 
 ## API Reference
 
