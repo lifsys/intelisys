@@ -5,7 +5,6 @@ This module requires a 1Password Connect server to be available and configured.
 The OP_CONNECT_TOKEN and OP_CONNECT_HOST environment variables must be set
 for the onepasswordconnectsdk to function properly.
 """
-__version__ = "0.2.1"
 import os
 import json
 from time import sleep
