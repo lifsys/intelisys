@@ -102,7 +102,10 @@ Intelisys supports a variety of AI models:
 
 ## New in Version 0.2.7
 
-- Prepared package for PyPI update
+- Implemented lazy loading for Intelisys class attributes
+- Improved performance by initializing attributes only when first accessed
+- Introduced properties for model, api_key, and client in the Intelisys class
+- Reduced initialization overhead of the Intelisys class
 - Updated version number in relevant files
 - Maintained all improvements from previous versions
 
