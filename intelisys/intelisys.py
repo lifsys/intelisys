@@ -47,7 +47,7 @@ class Intelisys:
         elif self.provider == "openrouter":
             self.model = model or "meta-llama/llama-3.1-405b-instruct"
         elif self.provider == "groq":
-            self.model = model or "llama-3.1-8b-instant"
+            self.model = model or "groq/llama3-8b-8192"
         self.name = name
         self.api_key = api_key or self._get_api_key()
         self.temperature = temperature
@@ -101,23 +101,18 @@ class Intelisys:
                 base_url="https://openrouter.ai/api/v1",
                 api_key=self.api_key
             )
-        elif self.provider == "groq" and self.use_async:
+        elif self.provider in ["groq", "openrouter"] and self.use_async:
             self.client = AsyncOpenAI(
-                base_url="https://api.groq.com/openai/v1",
+                base_url="https://api.groq.com/openai/v1" if self.provider == "groq" else "https://openrouter.ai/api/v1",
                 api_key=self.api_key
             )
         elif self.provider == "openai" and not self.use_async:
             self.client = OpenAI(api_key=self.api_key)
         elif self.provider == "anthropic" and not self.use_async:
             self.client = Anthropic(api_key=self.api_key)
-        elif self.provider == "openrouter" and not self.use_async:
+        elif self.provider in ["groq", "openrouter"] and not self.use_async:
             self.client = OpenAI(
-                base_url="https://openrouter.ai/api/v1",
-                api_key=self.api_key
-            )
-        elif self.provider == "groq" and not self.use_async:
-            self.client = OpenAI(
-                base_url="https://api.groq.com/openai/v1",
+                base_url="https://api.groq.com/openai/v1" if self.provider == "groq" else "https://openrouter.ai/api/v1",
                 api_key=self.api_key
             )
 
@@ -152,6 +147,8 @@ class Intelisys:
 
     def chat(self, user_input, **kwargs):
         self.add_message("user", user_input)
+        # Remove 'provider' from kwargs if it exists
+        kwargs.pop('provider', None)
         return self.get_response(**kwargs)
 
     async def chat_async(self, user_input, **kwargs):
@@ -203,15 +200,18 @@ class Intelisys:
                 **kwargs
             )
         else:
-            return self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "system", "content": self.system_message}] + self.history,
-                stream=self.stream,
-                temperature=self.temperature,
-                max_tokens=max_tokens,
-                response_format={"type": "json_object"} if self.json_mode and self.provider == "openai" else None,
+            common_params = {
+                "model": self.model,
+                "messages": [{"role": "system", "content": self.system_message}] + self.history,
+                "stream": self.stream,
+                "temperature": self.temperature,
+                "max_tokens": max_tokens,
                 **kwargs
-            )
+            }
+            if self.json_mode and self.provider == "openai":
+                common_params["response_format"] = {"type": "json_object"}
+            
+            return self.client.chat.completions.create(**common_params)
 
     def _handle_stream(self, response, color, should_print):
         assistant_response = ""
