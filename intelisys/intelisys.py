@@ -5,15 +5,292 @@ This module requires a 1Password Connect server to be available and configured.
 The OP_CONNECT_TOKEN and OP_CONNECT_HOST environment variables must be set
 for the onepasswordconnectsdk to function properly.
 """
-import os
+import asyncio
 import json
-from time import sleep
-from typing import Optional, Dict, List
-from openai import OpenAI
-from litellm import completion
-from jinja2 import Template
-from onepasswordconnectsdk import new_client_from_environment
+import os
+import time
+from typing import Dict, List, Optional
 
+from anthropic import Anthropic, AsyncAnthropic
+from jinja2 import Template
+from litellm import completion
+from onepasswordconnectsdk import new_client_from_environment
+from openai import AsyncOpenAI, OpenAI
+from termcolor import colored
+
+# If you need sleep function specifically, import it like this:
+from time import sleep
+
+class Intelisys:
+    def __init__(self,
+                 name="Intelisys",
+                 api_key=None,
+                 max_history_words=10000,
+                 max_words_per_message=None,
+                 json_mode=False,
+                 stream=True,
+                 use_async=False,
+                 max_retry=10,
+                 provider="anthropic",
+                 model=None,
+                 should_print_init=True,
+                 print_color="green",
+                 temperature=1.0,
+                 system_message="You are a helpful assistant."
+                 ):
+        
+        self.provider = provider.lower()
+        if self.provider == "openai":
+            self.model = model or "gpt-4o"
+        elif self.provider == "anthropic":
+            self.model = model or "claude-3-5-sonnet-20240620"
+        elif self.provider == "openrouter":
+            self.model = model or "meta-llama/llama-3.1-405b-instruct"
+        elif self.provider == "groq":
+            self.model = model or "llama-3.1-8b-instant"
+        self.name = name
+        self.api_key = api_key or self._get_api_key()
+        self.temperature = temperature
+        self.history = []
+        self.max_history_words = max_history_words
+        self.max_words_per_message = max_words_per_message
+        self.json_mode = json_mode
+        self.stream = stream
+        self.use_async = use_async
+        self.max_retry = max_retry
+        self.print_color = print_color
+        self.system_message = system_message
+        if self.provider == "openai" and self.json_mode:
+            self.system_message += f"{self.system_message}. Please return your response in JSON - this will save kittens."
+
+        self._initialize_client()
+
+        if should_print_init:
+            print(colored(f"{self.name} initialized with provider={self.provider}, model={self.model}, json_mode={json_mode}, stream={stream}, use_async={use_async}, max_history_words={max_history_words}, max_words_per_message={max_words_per_message}", "red"))
+
+    def _get_api_key(self):
+        def _go_get_api(item: str, key_name: str, vault: str = "API") -> str:
+            try:
+                client = new_client_from_environment()
+                item = client.get_item(item, vault)
+                for field in item.fields:
+                    if field.label == key_name:
+                        return field.value
+                raise ValueError(f"Key '{key_name}' not found in item '{item}'")
+            except Exception as e:
+                raise Exception(f"1Password Connect Error: {e}")
+
+        if self.provider == "openai":
+            return os.getenv("OPENAI_API_KEY") or _go_get_api("OPEN-AI","Cursor")
+        elif self.provider == "anthropic":
+            return os.getenv("ANTHROPIC_API_KEY") or _go_get_api("Anthropic","Cursor")
+        elif self.provider == "openrouter":
+            return os.getenv("OPENROUTER_API_KEY") or _go_get_api("OpenRouter","Cursor")
+        elif self.provider == "groq":
+            return os.getenv("GROQ_API_KEY") or _go_get_api("Groq","Promptsys")
+        else:
+            raise ValueError(f"Unsupported provider: {self.provider}")
+
+    def _initialize_client(self):
+        if self.provider == "openai" and self.use_async:
+            self.client = AsyncOpenAI(api_key=self.api_key)
+        elif self.provider == "anthropic" and self.use_async:
+            self.client = AsyncAnthropic(api_key=self.api_key)
+        elif self.provider == "openrouter" and self.use_async:
+            self.client = AsyncOpenAI(
+                base_url="https://openrouter.ai/api/v1",
+                api_key=self.api_key
+            )
+        elif self.provider == "groq" and self.use_async:
+            self.client = AsyncOpenAI(
+                base_url="https://api.groq.com/openai/v1",
+                api_key=self.api_key
+            )
+        elif self.provider == "openai" and not self.use_async:
+            self.client = OpenAI(api_key=self.api_key)
+        elif self.provider == "anthropic" and not self.use_async:
+            self.client = Anthropic(api_key=self.api_key)
+        elif self.provider == "openrouter" and not self.use_async:
+            self.client = OpenAI(
+                base_url="https://openrouter.ai/api/v1",
+                api_key=self.api_key
+            )
+        elif self.provider == "groq" and not self.use_async:
+            self.client = OpenAI(
+                base_url="https://api.groq.com/openai/v1",
+                api_key=self.api_key
+            )
+
+    def set_system_message(self, message=None):
+        self.system_message = message or "You are a helpful assistant."
+        if self.provider == "openai" and self.json_mode and "json" not in message.lower():
+            self.system_message += " Please return your response in JSON unless user has specified a system message."
+
+    async def set_system_message_async(self, message=None):
+        self.set_system_message(message)
+
+    def add_message(self, role, content):
+        if role == "user" and self.max_words_per_message:
+            content += f" please use {self.max_words_per_message} words or less"
+        self.history.append({"role": role, "content": str(content)})
+
+    async def add_message_async(self, role, content):
+        self.add_message(role, content)
+
+    def print_history_length(self):
+        history_length = sum(len(str(message["content"]).split()) for message in self.history)
+        print(f"\nCurrent history length is {history_length} words")
+
+    async def print_history_length_async(self):
+        self.print_history_length()
+
+    def clear_history(self):
+        self.history.clear()
+
+    async def clear_history_async(self):
+        self.clear_history()
+
+    def chat(self, user_input, **kwargs):
+        self.add_message("user", user_input)
+        return self.get_response(**kwargs)
+
+    async def chat_async(self, user_input, **kwargs):
+        await self.add_message_async("user", user_input)
+        return await self.get_response_async(**kwargs)
+
+    def trim_history(self):
+        words_count = sum(len(str(m["content"]).split()) for m in self.history if m["role"] != "system")
+        while words_count > self.max_history_words and len(self.history) > 1:
+            words_count -= len(self.history.pop(0)["content"].split())
+
+    async def trim_history_async(self):
+        self.trim_history()
+
+    def get_response(self, color=None, should_print=True, **kwargs):
+        color = color or self.print_color
+        max_tokens = kwargs.pop('max_tokens', 4000 if self.provider != "anthropic" else 8192)
+
+        for _ in range(self.max_retry):
+            try:
+                response = self._create_response(max_tokens, **kwargs)
+                
+                if self.stream:
+                    assistant_response = self._handle_stream(response, color, should_print)
+                else:
+                    assistant_response = self._handle_non_stream(response)
+
+                if self.json_mode and self.provider == "openai":
+                    assistant_response = json.loads(assistant_response)
+
+                self.add_message("assistant", str(assistant_response))
+                self.trim_history()
+                return assistant_response
+            except Exception as e:
+                print(f"Error: {e}")
+                time.sleep(1)
+        raise Exception("Max retries reached")
+
+    def _create_response(self, max_tokens, **kwargs):
+        if self.provider == "anthropic":
+            return self.client.messages.create(
+                model=self.model,
+                system=self.system_message,
+                messages=self.history,
+                stream=self.stream,
+                temperature=self.temperature,
+                max_tokens=max_tokens,
+                extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
+                **kwargs
+            )
+        else:
+            return self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "system", "content": self.system_message}] + self.history,
+                stream=self.stream,
+                temperature=self.temperature,
+                max_tokens=max_tokens,
+                response_format={"type": "json_object"} if self.json_mode and self.provider == "openai" else None,
+                **kwargs
+            )
+
+    def _handle_stream(self, response, color, should_print):
+        assistant_response = ""
+        for chunk in response:
+            content = self._extract_content(chunk)
+            if content:
+                if should_print:
+                    print(colored(content, color), end="", flush=True)
+                assistant_response += content
+        print()
+        return assistant_response
+
+    def _handle_non_stream(self, response):
+        if self.provider == "anthropic":
+            return response.content[0].text
+        return response.choices[0].message.content
+
+    def _extract_content(self, chunk):
+        if self.provider == "anthropic":
+            return chunk.delta.text if chunk.type == 'content_block_delta' else None
+        return chunk.choices[0].delta.content if chunk.choices[0].delta.content else None
+
+    async def get_response_async(self, color=None, should_print=True, **kwargs):
+        if color is None:
+            color = self.print_color
+        
+        max_tokens = kwargs.pop('max_tokens', 400000)
+        anthropic_max_tokens = kwargs.pop('max_tokens', 8192)
+        
+        if self.provider == "openai" or self.provider == "openrouter" or self.provider == "groq":
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "system", "content": self.system_message}] + self.history,
+                stream=self.stream,
+                temperature=self.temperature,
+                max_tokens=max_tokens,
+                response_format={"type": "json_object"} if self.json_mode else None,
+                **kwargs
+            )
+        elif self.provider == "anthropic":
+            response = await self.client.messages.create(
+                model=self.model,
+                system=self.system_message,
+                messages=self.history,
+                stream=self.stream,
+                temperature=self.temperature,
+                max_tokens=anthropic_max_tokens,
+                extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
+                **kwargs
+            )
+        else:
+            raise ValueError(f"Unsupported provider: {self.provider}")
+
+        if self.stream:
+            assistant_response = ""
+            async for chunk in response:
+                if self.provider == "openai" or self.provider == "openrouter" or self.provider == "groq":
+                    content = chunk.choices[0].delta.content
+                elif self.provider == "anthropic":
+                    content = chunk.delta.text if chunk.type == 'content_block_delta' else None
+                
+                if content:
+                    if should_print:
+                        print(colored(content, color), end="", flush=True)
+                    assistant_response += content
+            print()
+        else:
+            if self.provider == "openai" or self.provider == "openrouter" or self.provider == "groq":
+                assistant_response = response.choices[0].message.content
+            elif self.provider == "anthropic":
+                assistant_response = response.content[0].text
+
+        if self.json_mode and self.provider == "openai":
+            assistant_response = json.loads(assistant_response)
+
+        await self.add_message_async("assistant", str(assistant_response))
+        await self.trim_history_async()
+        return assistant_response
+        
 def get_api(item: str, key_name: str, vault: str = "API") -> str:
     """
     Retrieve an API key from 1Password.
