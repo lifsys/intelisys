@@ -51,11 +51,17 @@ Then try the installation again.
 Here's a quick example of how to use Intelisys:
 
 ```python
-from intelisys import get_completion_api
+from intelisys import get_completion_api, Intelisys
 
 # Make sure OP_CONNECT_TOKEN and OP_CONNECT_HOST are set in your environment
 
+# Using get_completion_api
 response = get_completion_api("Hello, how are you?", "gpt-4")
+print(response)
+
+# Using Intelisys class
+intelisys = Intelisys(name="MyAssistant", provider="openai", model="gpt-4")
+response = intelisys.chat("Tell me about artificial intelligence")
 print(response)
 ```
 
