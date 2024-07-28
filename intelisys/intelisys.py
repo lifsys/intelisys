@@ -778,13 +778,13 @@ def get_completion_api(
             raise ValueError(f"Failed to extract content from response: {extract_error}")
 
     except KeyError as ke:
-        print(f"Key error occurred: {ke}")
+        print(f"Key error: {str(ke)}")
     except ValueError as ve:
-        print(f"Value error occurred: {ve}")
+        print(f"Value error: {str(ve)}")
     except RuntimeError as re:
-        print(f"Runtime error occurred: {re}")
+        print(f"Runtime error: {str(re)}")
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
+        print(f"An unexpected error occurred: {str(e)}")
 
     return None
 
