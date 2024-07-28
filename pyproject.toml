@@ -1,0 +1,85 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "intelisys"
+dynamic = ["version"]
+description = "Intelligence/AI services for the Lifsys Enterprise"
+readme = "README.md"
+authors = [{name = "Lifsys Enterprise", email = "contact@lifsys.com"}]
+license = {file = "LICENSE"}
+requires-python = ">=3.7"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+keywords = ["ai", "intelligence", "openai", "anthropic", "google"]
+dependencies = [
+    "openai>=1.0.0",
+    "litellm>=1.0.0",
+    "jinja2>=3.0.0",
+    "onepasswordconnectsdk>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0",
+    "pytest-cov>=2.0",
+    "flake8>=3.9",
+    "black>=21.5b1",
+]
+
+[project.urls]
+Homepage = "https://github.com/lifsys/intelisys"
+Documentation = "https://intelisys.readthedocs.io/"
+Repository = "https://github.com/lifsys/intelisys.git"
+"Bug Tracker" = "https://github.com/lifsys/intelisys/issues"
+
+[tool.setuptools.dynamic]
+version = {attr = "intelisys.__version__"}
+
+[tool.setuptools.packages.find]
+include = ["intelisys", "intelisys.*"]
+
+[tool.black]
+line-length = 88
+target-version = ['py37']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+line_length = 88
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q"
+testpaths = [
+    "tests",
+]
