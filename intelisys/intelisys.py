@@ -40,6 +40,10 @@ class Intelisys:
                  ):
         
         self.provider = provider.lower()
+        supported_providers = ["openai", "anthropic", "openrouter", "groq"]
+        if self.provider not in supported_providers:
+            raise ValueError(f"Unsupported provider: {self.provider}. Supported providers are: {', '.join(supported_providers)}")
+        
         if self.provider == "openai":
             self.model = model or "gpt-4o"
         elif self.provider == "anthropic":
