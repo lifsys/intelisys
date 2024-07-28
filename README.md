@@ -10,11 +10,21 @@ You can install Intelisys using pip:
 pip install intelisys
 ```
 
+This will install the latest stable version from PyPI.
+
 For the latest development version, you can install directly from GitHub:
 
 ```
 pip install git+https://github.com/lifsys/intelisys.git
 ```
+
+Note: If you encounter any issues during installation, make sure you have the latest version of pip:
+
+```
+pip install --upgrade pip
+```
+
+Then try the installation again.
 
 ## Requirements
 
