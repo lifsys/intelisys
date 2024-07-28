@@ -59,7 +59,7 @@ class Intelisys:
         elif self.provider == "openrouter":
             self.model = model or "meta-llama/llama-3.1-405b-instruct"
         elif self.provider == "groq":
-            self.model = model or "groq/llama3-8b-8192"
+            self.model = model or "llama-3.1-8b-instant"
         self.name = name
         self.api_key = api_key or self._get_api_key()
         self.temperature = temperature
