@@ -42,7 +42,15 @@ class Intelisys:
         self.provider = provider.lower()
         supported_providers = ["openai", "anthropic", "openrouter", "groq"]
         if self.provider not in supported_providers:
-            raise ValueError(f"Unsupported provider: {self.provider}. Supported providers are: {', '.join(supported_providers)}")
+            # Check for potential typos
+            import difflib
+            close_matches = difflib.get_close_matches(self.provider, supported_providers, n=1, cutoff=0.6)
+            if close_matches:
+                suggestion = f"Did you mean '{close_matches[0]}'?"
+            else:
+                suggestion = "Please check the spelling and try again."
+            
+            raise ValueError(f"Unsupported provider: '{self.provider}'. {suggestion}\nSupported providers are: {', '.join(supported_providers)}")
         
         if self.provider == "openai":
             self.model = model or "gpt-4o"
