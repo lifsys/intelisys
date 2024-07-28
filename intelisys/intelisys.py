@@ -84,16 +84,19 @@ class Intelisys:
             except Exception as e:
                 raise Exception(f"1Password Connect Error: {e}")
 
-        if self.provider == "openai":
-            return os.getenv("OPENAI_API_KEY") or _go_get_api("OPEN-AI","Cursor")
-        elif self.provider == "anthropic":
-            return os.getenv("ANTHROPIC_API_KEY") or _go_get_api("Anthropic","Cursor")
-        elif self.provider == "openrouter":
-            return os.getenv("OPENROUTER_API_KEY") or _go_get_api("OpenRouter","Cursor")
-        elif self.provider == "groq":
-            return os.getenv("GROQ_API_KEY") or _go_get_api("Groq","Promptsys")
-        else:
-            raise ValueError(f"Unsupported provider: {self.provider}")
+        try:
+            if self.provider == "openai":
+                return os.getenv("OPENAI_API_KEY") or _go_get_api("OPEN-AI","Cursor")
+            elif self.provider == "anthropic":
+                return os.getenv("ANTHROPIC_API_KEY") or _go_get_api("Anthropic","Cursor")
+            elif self.provider == "openrouter":
+                return os.getenv("OPENROUTER_API_KEY") or _go_get_api("OpenRouter","Cursor")
+            elif self.provider == "groq":
+                return os.getenv("GROQ_API_KEY") or _go_get_api("Groq","Promptsys")
+            else:
+                raise ValueError(f"Unsupported provider: {self.provider}")
+        except Exception as e:
+            raise Exception(f"Error getting API key: {e}")
 
     def _initialize_client(self):
         if self.provider == "openai" and self.use_async:
@@ -171,7 +174,7 @@ class Intelisys:
         color = color or self.print_color
         max_tokens = kwargs.pop('max_tokens', 4000 if self.provider != "anthropic" else 8192)
 
-        for _ in range(self.max_retry):
+        for attempt in range(self.max_retry):
             try:
                 response = self._create_response(max_tokens, **kwargs)
                 
@@ -181,15 +184,21 @@ class Intelisys:
                     assistant_response = self._handle_non_stream(response)
 
                 if self.json_mode and self.provider == "openai":
-                    assistant_response = json.loads(assistant_response)
+                    try:
+                        assistant_response = json.loads(assistant_response)
+                    except json.JSONDecodeError as json_error:
+                        print(f"JSON decoding error: {json_error}")
+                        raise
 
                 self.add_message("assistant", str(assistant_response))
                 self.trim_history()
                 return assistant_response
             except Exception as e:
-                print(f"Error: {e}")
-                time.sleep(1)
-        raise Exception("Max retries reached")
+                print(f"Error on attempt {attempt + 1}/{self.max_retry}: {e}")
+                if attempt < self.max_retry - 1:
+                    time.sleep(1)
+                else:
+                    raise Exception(f"Max retries reached. Last error: {e}")
 
     def _create_response(self, max_tokens, **kwargs):
         if self.provider == "anthropic":
@@ -637,7 +646,11 @@ def get_completion_api(
             raise ValueError(f"Unsupported model: {model_name}")
 
         api_name, key_name, model_func = model_configs[model_name]
-        os.environ[f"{api_name.upper()}_API_KEY"] = get_api(api_name, key_name)
+        try:
+            os.environ[f"{api_name.upper()}_API_KEY"] = get_api(api_name, key_name)
+        except Exception as api_error:
+            raise ValueError(f"Failed to get API key for {api_name}: {api_error}")
+
         selected_model = model_func(model_name)
 
         # Select message type
@@ -656,19 +669,27 @@ def get_completion_api(
                 raise ValueError(f"Unsupported mode: {mode}")
 
         # Make the API call
-        response = completion(
-            model=selected_model,
-            messages=messages,
-            temperature=0.1,
-        )
+        try:
+            response = completion(
+                model=selected_model,
+                messages=messages,
+                temperature=0.1,
+            )
+        except Exception as completion_error:
+            raise RuntimeError(f"API call failed: {completion_error}")
 
         # Extract and return the response content
-        return response["choices"][0]["message"]["content"]
+        try:
+            return response["choices"][0]["message"]["content"]
+        except (KeyError, IndexError) as extract_error:
+            raise ValueError(f"Failed to extract content from response: {extract_error}")
 
     except KeyError as ke:
         print(f"Key error occurred: {ke}")
     except ValueError as ve:
         print(f"Value error occurred: {ve}")
+    except RuntimeError as re:
+        print(f"Runtime error occurred: {re}")
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
 
