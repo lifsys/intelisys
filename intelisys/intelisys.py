@@ -73,6 +73,19 @@ class Intelisys:
             print(colored(f"{self.name} initialized with provider={self.provider}, model={self.model}, json_mode={json_mode}, stream={stream}, use_async={use_async}, max_history_words={max_history_words}, max_words_per_message={max_words_per_message}", "red"))
 
     def _get_api_key(self):
+        """
+        Retrieve the API key for the specified provider.
+
+        This method attempts to get the API key from environment variables first,
+        and if not found, it uses the _go_get_api function to retrieve it from a secure storage.
+
+        Returns:
+            str: The API key for the specified provider.
+
+        Raises:
+            ValueError: If an unsupported provider is specified.
+            Exception: If there's an error in retrieving the API key.
+        """
         def _go_get_api(item: str, key_name: str, vault: str = "API") -> str:
             try:
                 client = new_client_from_environment()
@@ -99,6 +112,14 @@ class Intelisys:
             raise Exception(f"Error getting API key: {e}")
 
     def _initialize_client(self):
+        """
+        Initialize the appropriate client based on the provider and async settings.
+
+        This method sets up the client (either synchronous or asynchronous) for the specified provider.
+        It handles different configurations for OpenAI, Anthropic, OpenRouter, and Groq.
+
+        The method doesn't return anything but sets the `self.client` attribute with the appropriate client instance.
+        """
         if self.provider == "openai" and self.use_async:
             self.client = AsyncOpenAI(api_key=self.api_key)
         elif self.provider == "anthropic" and self.use_async:
@@ -124,50 +145,114 @@ class Intelisys:
             )
 
     def set_system_message(self, message=None):
+        """
+        Set the system message for the conversation.
+
+        Args:
+            message (str, optional): The system message to set. If None, a default message is used.
+        """
         self.system_message = message or "You are a helpful assistant."
         if self.provider == "openai" and self.json_mode and "json" not in message.lower():
             self.system_message += " Please return your response in JSON unless user has specified a system message."
 
     async def set_system_message_async(self, message=None):
+        """
+        Asynchronous version of set_system_message.
+
+        Args:
+            message (str, optional): The system message to set. If None, a default message is used.
+        """
         self.set_system_message(message)
 
     def add_message(self, role, content):
+        """
+        Add a message to the conversation history.
+
+        Args:
+            role (str): The role of the message sender (e.g., "user", "assistant").
+            content (str): The content of the message.
+        """
         if role == "user" and self.max_words_per_message:
             content += f" please use {self.max_words_per_message} words or less"
         self.history.append({"role": role, "content": str(content)})
 
     async def add_message_async(self, role, content):
+        """
+        Asynchronous version of add_message.
+
+        Args:
+            role (str): The role of the message sender (e.g., "user", "assistant").
+            content (str): The content of the message.
+        """
         self.add_message(role, content)
 
     def print_history_length(self):
+        """
+        Print the current length of the conversation history in words.
+        """
         history_length = sum(len(str(message["content"]).split()) for message in self.history)
         print(f"\nCurrent history length is {history_length} words")
 
     async def print_history_length_async(self):
+        """
+        Asynchronous version of print_history_length.
+        """
         self.print_history_length()
 
     def clear_history(self):
+        """
+        Clear the conversation history.
+        """
         self.history.clear()
 
     async def clear_history_async(self):
+        """
+        Asynchronous version of clear_history.
+        """
         self.clear_history()
 
     def chat(self, user_input, **kwargs):
+        """
+        Process a user input and get a response.
+
+        Args:
+            user_input (str): The user's input message.
+            **kwargs: Additional keyword arguments to pass to get_response.
+
+        Returns:
+            The response from get_response.
+        """
         self.add_message("user", user_input)
         # Remove 'provider' from kwargs if it exists
         kwargs.pop('provider', None)
         return self.get_response(**kwargs)
 
     async def chat_async(self, user_input, **kwargs):
+        """
+        Asynchronous version of chat.
+
+        Args:
+            user_input (str): The user's input message.
+            **kwargs: Additional keyword arguments to pass to get_response_async.
+
+        Returns:
+            The response from get_response_async.
+        """
         await self.add_message_async("user", user_input)
         return await self.get_response_async(**kwargs)
 
     def trim_history(self):
+        """
+        Trim the conversation history to keep it within the maximum word limit.
+        """
         words_count = sum(len(str(m["content"]).split()) for m in self.history if m["role"] != "system")
         while words_count > self.max_history_words and len(self.history) > 1:
             words_count -= len(self.history.pop(0)["content"].split())
 
     async def trim_history_async(self):
+        """
+        Asynchronous version of trim_history.
+        """
         self.trim_history()
 
     def get_response(self, color=None, should_print=True, **kwargs):
