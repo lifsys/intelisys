@@ -44,6 +44,7 @@ Then try the installation again.
 - Asynchronous assistant interactions
 - Template-based API calls
 - Improved error handling and logging
+- Consistent versioning across all package files
 
 ## Usage
 
@@ -93,11 +94,13 @@ Intelisys supports a variety of AI models:
 - Groq: groq-llama, groq-fast
 - MistralAI: mistral-large
 
-## New in Version 0.2.1
+## New in Version 0.2.3
 
-- Fixed minor bugs and improved stability
-- Updated documentation to reflect the latest changes
-- Enhanced compatibility with the latest versions of dependent libraries
+- Updated codebase for PyPI release
+- Improved documentation in README.md
+- Ensured version consistency across all files
+- Enhanced error handling and logging
+- Improved compatibility with the latest versions of dependent libraries
 
 ## API Reference
 
