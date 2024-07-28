@@ -52,16 +52,8 @@ class Intelisys:
             
             raise ValueError(f"Unsupported provider: '{self.provider}'. {suggestion}\nSupported providers are: {', '.join(supported_providers)}")
         
-        if self.provider == "openai":
-            self.model = model or "gpt-4o"
-        elif self.provider == "anthropic":
-            self.model = model or "claude-3-5-sonnet-20240620"
-        elif self.provider == "openrouter":
-            self.model = model or "meta-llama/llama-3.1-405b-instruct"
-        elif self.provider == "groq":
-            self.model = model or "llama-3.1-8b-instant"
         self.name = name
-        self.api_key = api_key or self._get_api_key()
+        self._api_key = api_key
         self.temperature = temperature
         self.history = []
         self.max_history_words = max_history_words
@@ -75,10 +67,36 @@ class Intelisys:
         if self.provider == "openai" and self.json_mode:
             self.system_message += f"{self.system_message}. Please return your response in JSON - this will save kittens."
 
-        self._initialize_client()
+        self._model = model
+        self._client = None
 
         if should_print_init:
-            print(colored(f"{self.name} initialized with provider={self.provider}, model={self.model}, json_mode={json_mode}, stream={stream}, use_async={use_async}, max_history_words={max_history_words}, max_words_per_message={max_words_per_message}", "red"))
+            print(colored(f"{self.name} initialized with provider={self.provider}, json_mode={json_mode}, stream={stream}, use_async={use_async}, max_history_words={max_history_words}, max_words_per_message={max_words_per_message}", "red"))
+
+    @property
+    def model(self):
+        if self._model is None:
+            if self.provider == "openai":
+                self._model = "gpt-4o"
+            elif self.provider == "anthropic":
+                self._model = "claude-3-5-sonnet-20240620"
+            elif self.provider == "openrouter":
+                self._model = "meta-llama/llama-3.1-405b-instruct"
+            elif self.provider == "groq":
+                self._model = "llama-3.1-8b-instant"
+        return self._model
+
+    @property
+    def api_key(self):
+        if self._api_key is None:
+            self._api_key = self._get_api_key()
+        return self._api_key
+
+    @property
+    def client(self):
+        if self._client is None:
+            self._initialize_client()
+        return self._client
 
     def _get_api_key(self):
         """
@@ -126,28 +144,28 @@ class Intelisys:
         This method sets up the client (either synchronous or asynchronous) for the specified provider.
         It handles different configurations for OpenAI, Anthropic, OpenRouter, and Groq.
 
-        The method doesn't return anything but sets the `self.client` attribute with the appropriate client instance.
+        The method doesn't return anything but sets the `self._client` attribute with the appropriate client instance.
         """
         if self.provider == "openai" and self.use_async:
-            self.client = AsyncOpenAI(api_key=self.api_key)
+            self._client = AsyncOpenAI(api_key=self.api_key)
         elif self.provider == "anthropic" and self.use_async:
-            self.client = AsyncAnthropic(api_key=self.api_key)
+            self._client = AsyncAnthropic(api_key=self.api_key)
         elif self.provider == "openrouter" and self.use_async:
-            self.client = AsyncOpenAI(
+            self._client = AsyncOpenAI(
                 base_url="https://openrouter.ai/api/v1",
                 api_key=self.api_key
             )
         elif self.provider in ["groq", "openrouter"] and self.use_async:
-            self.client = AsyncOpenAI(
+            self._client = AsyncOpenAI(
                 base_url="https://api.groq.com/openai/v1" if self.provider == "groq" else "https://openrouter.ai/api/v1",
                 api_key=self.api_key
             )
         elif self.provider == "openai" and not self.use_async:
-            self.client = OpenAI(api_key=self.api_key)
+            self._client = OpenAI(api_key=self.api_key)
         elif self.provider == "anthropic" and not self.use_async:
-            self.client = Anthropic(api_key=self.api_key)
+            self._client = Anthropic(api_key=self.api_key)
         elif self.provider in ["groq", "openrouter"] and not self.use_async:
-            self.client = OpenAI(
+            self._client = OpenAI(
                 base_url="https://api.groq.com/openai/v1" if self.provider == "groq" else "https://openrouter.ai/api/v1",
                 api_key=self.api_key
             )
