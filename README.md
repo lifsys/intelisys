@@ -45,6 +45,7 @@ Then try the installation again.
 - Template-based API calls
 - Improved error handling and logging
 - Consistent versioning across all package files
+- Lazy loading of Intelisys class attributes for improved performance
 
 ## Usage
 
@@ -87,6 +88,11 @@ for response in responses:
 malformed_json = "{'key': 'value', 'nested': {'a':1, 'b': 2,}}"
 fixed_json = fix_json(malformed_json)
 print(fixed_json)
+
+# Demonstrating lazy loading
+intelisys = Intelisys(name="LazyAssistant", provider="openai")
+# The model, api_key, and client are not initialized until first accessed
+print(intelisys.model)  # This will trigger the initialization of the model
 ```
 
 ## Supported Models
@@ -100,13 +106,12 @@ Intelisys supports a variety of AI models:
 - Groq: groq-llama, groq-fast
 - MistralAI: mistral-large
 
-## New in Version 0.2.7
+## New in Version 0.2.8
 
-- Implemented lazy loading for Intelisys class attributes
-- Improved performance by initializing attributes only when first accessed
-- Introduced properties for model, api_key, and client in the Intelisys class
-- Reduced initialization overhead of the Intelisys class
-- Updated version number in relevant files
+- Enhanced lazy loading for Intelisys class attributes
+- Further improved performance by optimizing attribute initialization
+- Updated documentation with examples of lazy loading usage
+- Ensured version consistency across all package files
 - Maintained all improvements from previous versions
 
 ## API Reference

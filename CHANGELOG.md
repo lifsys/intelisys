@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [0.2.8] - 2024-08-03
+- Prepared package for PyPI update
+- Updated README.md with latest features and usage examples
+- Ensured version consistency across all files
+
 ## [0.2.7] - 2024-08-02
 - Implemented lazy loading for Intelisys class attributes to reduce initialization overhead
 - Introduced properties for model, api_key, and client in the Intelisys class
