@@ -35,7 +35,7 @@ class Intelisys:
                  model=None,
                  should_print_init=True,
                  print_color="green",
-                 temperature=1.0,
+                 temperature=0,
                  system_message="You are a helpful assistant."
                  ):
         
@@ -450,7 +450,7 @@ def get_api(item: str, key_name: str, vault: str = "API") -> str:
         raise Exception(f"Connect Error: {e}")
 
 
-def template_api_json(model: str, render_data: Dict, system_message: str, persona: str) -> Dict:
+def template_api_json(model: str, render_data: dict, system_messages: str, persona: str, provider: str = "openai") -> dict:
     """
     Get the completion response from the API using the specified model and return it as a JSON object.
 
@@ -482,14 +482,14 @@ def template_api_json(model: str, render_data: Dict, system_message: str, person
         >>> print(response)
         {'summary': 'This is a summary of the document...', 'key_points': ['Point 1', 'Point 2']}
     """
-    xtemplate = Template(system_message)
+    xtemplate = Template(system_messages)
     prompt = xtemplate.render(render_data)
-    response = get_completion_api(prompt, model, "system", persona)
+    response = Intelisys(provider=provider, model=model, system_message=persona).chat(prompt)
     response = response.strip("```json\n").strip("```").strip()
     response = json.loads(response)
     return response
 
-def template_api(model: str, render_data: Dict, system_message: str, persona: str) -> str:
+def template_api(model: str, render_data: dict, system_messages: str, persona: str, provider: str = "openai") -> str:
     """
     Get the completion response from the API using the specified model.
 
@@ -520,9 +520,9 @@ def template_api(model: str, render_data: Dict, system_message: str, persona: st
         >>> print(response)
         "Artificial Intelligence, or AI, is like teaching computers to think and learn..."
     """
-    xtemplate = Template(system_message)
+    xtemplate = Template(system_messages)
     prompt = xtemplate.render(render_data)
-    response = get_completion_api(prompt, model, "system", persona)
+    response = Intelisys(provider=provider, model=model, system_message=persona).chat(prompt)
     return response
 
 def initialize_client() -> OpenAI:
