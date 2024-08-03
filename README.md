@@ -2,12 +2,11 @@
 
 Intelisys is a powerful Python library that provides a unified interface for interacting with various AI models and services. It offers seamless integration with OpenAI, Anthropic, OpenRouter, and Groq, making it an essential tool for AI-powered applications.
 
-## New in Version 0.3.1
+## New in Version 0.3.2
 
-- Enhanced error handling and retry mechanism for API calls
-- Improved JSON parsing with fallback to safe_json_loads
-- Updated documentation for clearer usage instructions
-- Minor bug fixes and performance improvements
+- Prepared for PyPI update
+- Incremented version number across all relevant files
+- Maintained all improvements from previous versions
 
 ## Installation
 
