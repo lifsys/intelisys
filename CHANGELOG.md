@@ -19,6 +19,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [0.3.0] - 2024-08-07
+### Added
+- Support for multiple new AI models including OpenAI, Anthropic, Google, TogetherAI, Groq, and MistralAI
+- Asynchronous methods for chat and response handling
+- Template-based API calls with `template_api` and `template_api_json` functions
+- JSON fixing utility with `fix_json` function
+
+### Changed
+- Significantly refactored `Intelisys` class for better performance and flexibility
+- Improved error handling and logging across the library
+- Enhanced API key management using 1Password Connect
+
+### Fixed
+- Various bug fixes and performance improvements
+
 ## [0.2.11] - 2024-08-06
 - Prepared package for PyPI update
 - Updated version number in relevant files

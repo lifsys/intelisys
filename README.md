@@ -1,30 +1,30 @@
 # Intelisys
 
-Intelisys is a Python library that provides intelligence/AI services for the Lifsys Enterprise. It offers a unified interface to interact with various AI models and services, including OpenAI, Anthropic, Google, and more.
+Intelisys is a powerful Python library that provides a unified interface for interacting with various AI models and services. It offers seamless integration with OpenAI, Anthropic, Google, TogetherAI, Groq, MistralAI, and more, making it an essential tool for AI-powered applications.
+
+## New in Version 0.3.0
+
+- Added support for multiple new AI models including OpenAI, Anthropic, Google, TogetherAI, Groq, and MistralAI
+- Introduced asynchronous methods for chat and response handling
+- Implemented template-based API calls with `template_api` and `template_api_json` functions
+- Added a JSON fixing utility with the `fix_json` function
+- Significantly refactored the `Intelisys` class for better performance and flexibility
+- Improved error handling and logging across the library
+- Enhanced API key management using 1Password Connect
 
 ## Installation
 
-You can install Intelisys using pip:
+Install Intelisys using pip:
 
 ```
 pip install intelisys
 ```
 
-This will install the latest stable version from PyPI.
-
-For the latest development version, you can install directly from GitHub:
+For the latest development version:
 
 ```
 pip install git+https://github.com/lifsys/intelisys.git
 ```
-
-Note: If you encounter any issues during installation, make sure you have the latest version of pip:
-
-```
-pip install --upgrade pip
-```
-
-Then try the installation again.
 
 ## Requirements
 
@@ -34,53 +34,47 @@ Then try the installation again.
   - `OP_CONNECT_TOKEN`: Your 1Password Connect token
   - `OP_CONNECT_HOST`: The URL of your 1Password Connect server
 
-**Note**: If no local 1Password Connect server is available, the library will fail to retrieve API keys.
+**Note**: The library requires a local 1Password Connect server for API key retrieval.
 
-## Features
+## Key Features
 
-- Support for multiple AI models (OpenAI, Anthropic, Google, TogetherAI, Groq, MistralAI)
-- Secure API key management using 1Password Connect
-- JSON formatting and template rendering
-- Asynchronous assistant interactions
-- Template-based API calls
-- Improved error handling and logging
-- Consistent versioning across all package files
-- Lazy loading of Intelisys class attributes for improved performance
+- Multi-model support (OpenAI, Anthropic, Google, TogetherAI, Groq, MistralAI)
+- Secure API key management with 1Password Connect
+- Asynchronous and synchronous chat interfaces
+- Template-based API calls for flexible prompts
+- JSON formatting and fixing utilities
+- Lazy loading of attributes for improved performance
+- Comprehensive error handling and logging
 
-## Usage
-
-Here's a quick example of how to use Intelisys:
+## Quick Start
 
 ```python
-from intelisys import get_completion_api, Intelisys
-
-# Make sure OP_CONNECT_TOKEN and OP_CONNECT_HOST are set in your environment
-
-# Using get_completion_api
-response = get_completion_api("Hello, how are you?", "gpt-4")
-print(response)
+from intelisys import Intelisys, get_completion_api
 
 # Using Intelisys class
 intelisys = Intelisys(name="MyAssistant", provider="openai", model="gpt-4")
-response = intelisys.chat("Tell me about artificial intelligence")
+response = intelisys.chat("Explain quantum computing")
+print(response)
+
+# Using get_completion_api
+response = get_completion_api("What is machine learning?", "gpt-4")
 print(response)
 ```
 
-### Advanced Usage
+## Advanced Usage
 
 ```python
 from intelisys import template_api_json, get_assistant, fix_json
 
-# Using a template for API calls
-render_data = {"user_name": "Alice"}
-system_message = "You are a helpful assistant. Greet {{user_name}}."
-response = template_api_json("gpt-4", render_data, system_message, "friendly_assistant")
+# Template-based API call
+render_data = {"topic": "artificial intelligence"}
+system_message = "Explain {{topic}} in simple terms."
+response = template_api_json("gpt-4", render_data, system_message, "teacher")
 print(response)
 
 # Using an OpenAI assistant
 assistant_id = "your_assistant_id"
-reference = "What's the weather like today?"
-responses = get_assistant(reference, assistant_id)
+responses = get_assistant("Summarize the latest AI breakthroughs", assistant_id)
 for response in responses:
     print(response)
 
@@ -89,15 +83,20 @@ malformed_json = "{'key': 'value', 'nested': {'a':1, 'b': 2,}}"
 fixed_json = fix_json(malformed_json)
 print(fixed_json)
 
-# Demonstrating lazy loading
-intelisys = Intelisys(name="LazyAssistant", provider="openai")
-# The model, api_key, and client are not initialized until first accessed
-print(intelisys.model)  # This will trigger the initialization of the model
+# Asynchronous chat
+import asyncio
+
+async def async_chat():
+    intelisys = Intelisys(name="AsyncAssistant", provider="anthropic", model="claude-3.5")
+    response = await intelisys.chat_async("What are the implications of AGI?")
+    print(response)
+
+asyncio.run(async_chat())
 ```
 
 ## Supported Models
 
-Intelisys supports a variety of AI models:
+Intelisys supports a wide range of AI models:
 
 - OpenAI: gpt-4o-mini, gpt-4, gpt-4o
 - Anthropic: claude-3.5
@@ -106,25 +105,17 @@ Intelisys supports a variety of AI models:
 - Groq: groq-llama, groq-fast
 - MistralAI: mistral-large
 
-## New in Version 0.2.11
-
-- Enhanced lazy loading for Intelisys class attributes
-- Further improved performance by optimizing attribute initialization
-- Updated documentation with examples of lazy loading usage
-- Ensured version consistency across all package files
-- Maintained all improvements from previous versions
-
 ## API Reference
 
-For detailed information on available functions and their usage, please refer to the docstrings in the source code.
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+For detailed information on available functions and their usage, please refer to the docstrings in the source code or our [API documentation](https://intelisys.readthedocs.io/).
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for more details.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Changelog
 
@@ -132,4 +123,4 @@ For a detailed list of changes and version history, please refer to the [CHANGEL
 
 ## About Lifsys, Inc
 
-Lifsys, Inc is an AI company dedicated to developing solutions for the future. For more information, visit [www.lifsys.com](https://www.lifsys.com).
+Lifsys, Inc is an innovative AI company dedicated to developing cutting-edge solutions for the future. Visit [www.lifsys.com](https://www.lifsys.com) to learn more about our mission and projects.
