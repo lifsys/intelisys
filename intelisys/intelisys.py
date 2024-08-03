@@ -8,7 +8,7 @@ for the onepasswordconnectsdk to function properly.
 import asyncio
 import json
 import os
-from typing import Dict, List, Optional, Union
+from typing import Dict,Optional, Union
 from contextlib import contextmanager
 
 from anthropic import Anthropic, AsyncAnthropic
@@ -28,7 +28,7 @@ class Intelisys:
 
     def __init__(self, name="Intelisys", api_key=None, max_history_words=10000,
                  max_words_per_message=None, json_mode=False, stream=True, use_async=False,
-                 max_retry=10, provider="anthropic", model=None, should_print_init=True,
+                 max_retry=10, provider="anthropic", model=None, should_print_init=False,
                  print_color="green", temperature=0):
         
         self.provider = provider.lower()
