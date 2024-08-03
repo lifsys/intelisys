@@ -1,13 +1,13 @@
 # Intelisys
 
-Intelisys is a powerful Python library that provides a unified interface for interacting with various AI models and services. It offers seamless integration with OpenAI, Anthropic, Google, TogetherAI, Groq, MistralAI, and more, making it an essential tool for AI-powered applications.
+Intelisys is a powerful Python library that provides a unified interface for interacting with various AI models and services. It offers seamless integration with OpenAI, Anthropic, OpenRouter, and Groq, making it an essential tool for AI-powered applications.
 
 ## New in Version 0.3.0
 
-- Added support for multiple new AI models including OpenAI, Anthropic, Google, TogetherAI, Groq, and MistralAI
+- Added support for multiple new AI providers including OpenAI, Anthropic, OpenRouter, and Groq
 - Introduced asynchronous methods for chat and response handling
-- Implemented template-based API calls with `template_api` and `template_api_json` functions
-- Added a JSON fixing utility with the `fix_json` function
+- Implemented template-based API calls with `template_chat` and `template_chat_async` methods
+- Added JSON mode support for compatible providers
 - Significantly refactored the `Intelisys` class for better performance and flexibility
 - Improved error handling and logging across the library
 - Enhanced API key management using 1Password Connect
@@ -38,76 +38,72 @@ pip install git+https://github.com/lifsys/intelisys.git
 
 ## Key Features
 
-- Multi-model support (OpenAI, Anthropic, Google, TogetherAI, Groq, MistralAI)
+- Multi-provider support (OpenAI, Anthropic, OpenRouter, Groq)
 - Secure API key management with 1Password Connect
 - Asynchronous and synchronous chat interfaces
 - Template-based API calls for flexible prompts
-- JSON formatting and fixing utilities
+- JSON mode support for structured responses
 - Lazy loading of attributes for improved performance
 - Comprehensive error handling and logging
 
 ## Quick Start
 
 ```python
-from intelisys import Intelisys, get_completion_api
+from intelisys import Intelisys
 
 # Using Intelisys class
 intelisys = Intelisys(name="MyAssistant", provider="openai", model="gpt-4")
-response = intelisys.chat("Explain quantum computing")
+response = intelisys.chat("Explain quantum computing").get_last_response()
 print(response)
 
-# Using get_completion_api
-response = get_completion_api("What is machine learning?", "gpt-4")
-print(response)
+# Using JSON mode
+intelisys_json = Intelisys(name="JSONAssistant", provider="openai", model="gpt-4", json_mode=True)
+response = intelisys_json.chat("List 3 quantum computing concepts").get_last_response()
+print(response)  # This will be a Python dictionary
 ```
 
 ## Advanced Usage
 
 ```python
-from intelisys import template_api_json, get_assistant, fix_json
-
-# Template-based API call
-render_data = {"topic": "artificial intelligence"}
-system_message = "Explain {{topic}} in simple terms."
-response = template_api_json("gpt-4", render_data, system_message, "teacher")
-print(response)
-
-# Using an OpenAI assistant
-assistant_id = "your_assistant_id"
-responses = get_assistant("Summarize the latest AI breakthroughs", assistant_id)
-for response in responses:
-    print(response)
-
-# Fixing malformed JSON
-malformed_json = "{'key': 'value', 'nested': {'a':1, 'b': 2,}}"
-fixed_json = fix_json(malformed_json)
-print(fixed_json)
-
-# Asynchronous chat
+from intelisys import Intelisys
 import asyncio
 
+# Template-based API call
+intelisys = Intelisys(name="TemplateAssistant", provider="anthropic", model="claude-3-5-sonnet-20240620")
+render_data = {"topic": "artificial intelligence"}
+template = "Explain {{topic}} in simple terms."
+response = intelisys.template_chat(render_data, template).get_last_response()
+print(response)
+
+# Asynchronous chat
 async def async_chat():
-    intelisys = Intelisys(name="AsyncAssistant", provider="anthropic", model="claude-3.5")
+    intelisys = Intelisys(name="AsyncAssistant", provider="anthropic", model="claude-3-5-sonnet-20240620")
     response = await intelisys.chat_async("What are the implications of AGI?")
-    print(response)
+    print(response.get_last_response())
 
 asyncio.run(async_chat())
+
+# Using context manager for temporary template and persona changes
+intelisys = Intelisys(name="ContextAssistant", provider="openai", model="gpt-4")
+with intelisys.template_context(template="Summarize {{topic}} in one sentence.", persona="You are a concise summarizer."):
+    response = intelisys.template_chat({"topic": "quantum entanglement"}).get_last_response()
+    print(response)
 ```
 
-## Supported Models
+## Supported Providers and Models
 
-Intelisys supports a wide range of AI models:
+Intelisys supports a wide range of AI providers and models:
 
-- OpenAI: gpt-4o-mini, gpt-4, gpt-4o
-- Anthropic: claude-3.5
-- Google: gemini-flash
-- TogetherAI: llama-3-70b, llama-3.1-large
-- Groq: groq-llama, groq-fast
-- MistralAI: mistral-large
+- OpenAI: Various GPT models including gpt-4
+- Anthropic: Claude models including claude-3-5-sonnet-20240620
+- OpenRouter: Access to multiple AI models through a single API
+- Groq: Fast inference models
+
+For a complete list of supported models, please refer to the `DEFAULT_MODELS` dictionary in the `Intelisys` class.
 
 ## API Reference
 
-For detailed information on available functions and their usage, please refer to the docstrings in the source code or our [API documentation](https://intelisys.readthedocs.io/).
+For detailed information on available methods and their usage, please refer to the docstrings in the source code or our [API documentation](https://intelisys.readthedocs.io/).
 
 ## Contributing
 
