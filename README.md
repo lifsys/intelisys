@@ -106,7 +106,7 @@ Intelisys supports a variety of AI models:
 - Groq: groq-llama, groq-fast
 - MistralAI: mistral-large
 
-## New in Version 0.2.8
+## New in Version 0.2.11
 
 - Enhanced lazy loading for Intelisys class attributes
 - Further improved performance by optimizing attribute initialization
