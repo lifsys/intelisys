@@ -2,15 +2,12 @@
 
 Intelisys is a powerful Python library that provides a unified interface for interacting with various AI models and services. It offers seamless integration with OpenAI, Anthropic, OpenRouter, and Groq, making it an essential tool for AI-powered applications.
 
-## New in Version 0.3.0
+## New in Version 0.3.1
 
-- Added support for multiple new AI providers including OpenAI, Anthropic, OpenRouter, and Groq
-- Introduced asynchronous methods for chat and response handling
-- Implemented template-based API calls with `template_chat` and `template_chat_async` methods
-- Added JSON mode support for compatible providers
-- Significantly refactored the `Intelisys` class for better performance and flexibility
-- Improved error handling and logging across the library
-- Enhanced API key management using 1Password Connect
+- Enhanced error handling and retry mechanism for API calls
+- Improved JSON parsing with fallback to safe_json_loads
+- Updated documentation for clearer usage instructions
+- Minor bug fixes and performance improvements
 
 ## Installation
 
@@ -45,6 +42,7 @@ pip install git+https://github.com/lifsys/intelisys.git
 - JSON mode support for structured responses
 - Lazy loading of attributes for improved performance
 - Comprehensive error handling and logging
+- Retry mechanism for API calls
 
 ## Quick Start
 
@@ -79,7 +77,7 @@ print(response)
 async def async_chat():
     intelisys = Intelisys(name="AsyncAssistant", provider="anthropic", model="claude-3-5-sonnet-20240620")
     response = await intelisys.chat_async("What are the implications of AGI?")
-    print(response.get_last_response())
+    print(await response.get_last_response())
 
 asyncio.run(async_chat())
 
@@ -88,6 +86,11 @@ intelisys = Intelisys(name="ContextAssistant", provider="openai", model="gpt-4")
 with intelisys.template_context(template="Summarize {{topic}} in one sentence.", persona="You are a concise summarizer."):
     response = intelisys.template_chat({"topic": "quantum entanglement"}).get_last_response()
     print(response)
+
+# Using retry mechanism
+intelisys = Intelisys(name="RetryAssistant", provider="openai", model="gpt-4", max_retry=5)
+response = intelisys.chat("This might fail, but we'll retry").get_last_response()
+print(response)
 ```
 
 ## Supported Providers and Models
@@ -100,6 +103,14 @@ Intelisys supports a wide range of AI providers and models:
 - Groq: Fast inference models
 
 For a complete list of supported models, please refer to the `DEFAULT_MODELS` dictionary in the `Intelisys` class.
+
+## Error Handling
+
+Intelisys now includes improved error handling and a retry mechanism for API calls. If an API call fails, the library will automatically retry the call up to the specified `max_retry` times (default is 10). This helps to handle temporary network issues or API rate limits.
+
+## JSON Parsing
+
+For JSON responses, Intelisys now uses a more robust parsing method. If the standard `json.loads()` fails, it falls back to `safe_json_loads()` from the `utilisys` library, which can handle some common JSON parsing errors.
 
 ## API Reference
 
