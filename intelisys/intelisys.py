@@ -61,7 +61,7 @@ class Intelisys:
         self.template_data = {}
 
         if should_print_init:
-            print(colored(f"{self.name} initialized with provider={self.provider}, json_mode={json_mode}, stream={stream}, use_async={use_async}, max_history_words={max_history_words}, max_words_per_message={max_words_per_message}", "red"))
+            print(colored(f"\n{self.name} initialized with provider={self.provider}, model={self.model}, json_mode={self.json_mode}, temp={self.temperature}", "red"))
 
     def _raise_unsupported_provider_error(self):
         import difflib
