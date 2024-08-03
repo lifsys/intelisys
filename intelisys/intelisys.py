@@ -35,8 +35,7 @@ class Intelisys:
                  model=None,
                  should_print_init=True,
                  print_color="green",
-                 temperature=0,
-                 system_message="You are a helpful assistant."
+                 temperature=0
                  ):
         
         self.provider = provider.lower()
