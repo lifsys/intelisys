@@ -62,7 +62,7 @@ class Intelisys:
         self.use_async = use_async
         self.max_retry = max_retry
         self.print_color = print_color
-        self.system_message = system_message
+        self.system_message = "You are a helpful assistant."
         if self.provider == "openai" and self.json_mode:
             self.system_message += f"{self.system_message}. Please return your response in JSON - this will save kittens."
 
