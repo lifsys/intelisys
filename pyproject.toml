@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "intelisys"
-version = "0.3.2"
+version = "0.3.3"
 description = "Intelligence/AI services for the Lifsys Enterprise"
 readme = "README.md"
 authors = [{name = "Lifsys Enterprise", email = "contact@lifsys.com"}]
