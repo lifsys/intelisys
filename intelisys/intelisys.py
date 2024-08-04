@@ -139,9 +139,9 @@ class Intelisys:
     }
 
     def __init__(self, name="Intelisys", api_key=None, max_history_words=10000,
-                 max_words_per_message=None, json_mode=False, stream=True, use_async=False,
+                 max_words_per_message=None, json_mode=False, stream=False, use_async=False,
                  max_retry=10, provider="anthropic", model=None, should_print_init=False,
-                 print_color="green", temperature=0):
+                 print_color="green", temperature=0, max_tokens=None):
         
         self.provider = provider.lower()
         if self.provider not in self.SUPPORTED_PROVIDERS:
@@ -158,6 +158,7 @@ class Intelisys:
         self.use_async = use_async
         self.max_retry = max_retry
         self.print_color = print_color
+        self.max_tokens = max_tokens
         self.system_message = "You are a helpful assistant."
         if self.provider == "openai" and self.json_mode:
             self.system_message += " Please return your response in JSON - this will save kittens."
@@ -264,7 +265,7 @@ class Intelisys:
 
     def get_response(self, color=None, should_print=True, **kwargs):
         color = color or self.print_color
-        max_tokens = kwargs.pop('max_tokens', 4000 if self.provider != "anthropic" else 8192)
+        max_tokens = kwargs.pop('max_tokens', self.max_tokens if self.max_tokens is not None else (4000 if self.provider != "anthropic" else 8192))  # Use self.max_tokens if provided
 
         for attempt in range(self.max_retry):
             try:
