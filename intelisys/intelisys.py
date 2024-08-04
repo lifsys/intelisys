@@ -232,7 +232,7 @@ class Intelisys:
             words_count -= len(self.history.pop(0)["content"].split())
         return self
 
-    def get_last_response(self):
+    def results(self):
         return self.last_response
 
     def set_default_template(self, template: str) -> 'Intelisys':
@@ -268,7 +268,7 @@ class Intelisys:
             raise ValueError(f"Invalid template: {e}")
 
         self.set_system_message(persona or self.default_persona)
-        response = self.chat(prompt).get_last_response()
+        response = self.chat(prompt).results()
 
         if self.json_mode:
             if isinstance(response, dict):
@@ -393,7 +393,7 @@ class Intelisys:
 
         await self.set_system_message_async(persona or self.default_persona)
         response = await self.chat_async(prompt)
-        response = self.get_last_response()
+        response = self.results()
 
         if self.json_mode:
             if isinstance(response, dict):
