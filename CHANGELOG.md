@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [0.3.6] - 2024-08-12
+### Changed
+- Prepared package for PyPI update
+- Updated version number to 0.3.6 in all relevant files
+- Ensured consistency in version numbers across the package
+- Maintained all improvements from previous versions
+
 ## [0.3.5] - 2024-08-11
 ### Changed
 - Prepared package for PyPI update
