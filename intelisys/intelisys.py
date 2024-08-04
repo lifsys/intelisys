@@ -233,6 +233,12 @@ class Intelisys:
         return self
 
     def results(self):
+        """
+        Returns the last response from the AI model.
+
+        Returns:
+            The last response from the AI model, which could be a string or a dictionary (if in JSON mode).
+        """
         return self.last_response
 
     def set_default_template(self, template: str) -> 'Intelisys':

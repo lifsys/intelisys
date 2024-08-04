@@ -52,12 +52,12 @@ from intelisys import Intelisys
 
 # Using Intelisys class
 intelisys = Intelisys(name="MyAssistant", provider="openai", model="gpt-4")
-response = intelisys.chat("Explain quantum computing").get_last_response()
+response = intelisys.chat("Explain quantum computing").results()
 print(response)
 
 # Using JSON mode
 intelisys_json = Intelisys(name="JSONAssistant", provider="openai", model="gpt-4", json_mode=True)
-response = intelisys_json.chat("List 3 quantum computing concepts").get_last_response()
+response = intelisys_json.chat("List 3 quantum computing concepts").results()
 print(response)  # This will be a Python dictionary
 ```
 
@@ -71,14 +71,14 @@ import asyncio
 intelisys = Intelisys(name="TemplateAssistant", provider="anthropic", model="claude-3-5-sonnet-20240620")
 render_data = {"topic": "artificial intelligence"}
 template = "Explain {{topic}} in simple terms."
-response = intelisys.template_chat(render_data, template).get_last_response()
+response = intelisys.template_chat(render_data, template).results()
 print(response)
 
 # Asynchronous chat
 async def async_chat():
     intelisys = Intelisys(name="AsyncAssistant", provider="anthropic", model="claude-3-5-sonnet-20240620")
     response = await intelisys.chat_async("What are the implications of AGI?")
-    print(await response.get_last_response())
+    print(await response.results())
 
 asyncio.run(async_chat())
 
