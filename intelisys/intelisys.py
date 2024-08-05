@@ -6,15 +6,15 @@ The OP_CONNECT_TOKEN and OP_CONNECT_HOST environment variables must be set
 for the onepasswordconnectsdk to function properly.
 
 Example usage for image OCR:
-    intelisys = Intelisys(provider="openai", model="gpt-4o-mini")
-    result = (intelisys
-     .chat("Please provide all the text in the following image(s).")
-     .image("http://www.mattmahoney.net/ocr/stock_gs200.jpg")
-     .image("/Users/lifsys/Documents/devhub/testingZone/_Archive/screen_small-2.png")
-     .send()
-     .results()
-    )
-    print(result)
+        intelisys = Intelisys(provider="openrouter", model="google/gemini-pro-vision")
+        #intelisys = Intelisys(provider="openai", model="gpt-4o-mini")
+        result = (intelisys
+        .chat("Historical analysis of language use in the following image(s). Please step through each area of the image and extract all text.")
+        .image("/Users/lifsys/Documents/devhub/testingZone/_Archive/screen_small-2.png")
+        .send()
+        .results()
+        )
+        result
 """
 import re
 import ast
@@ -190,10 +190,7 @@ class Intelisys:
         self.current_message = None
         
         self.logger = logging.getLogger(__name__)
-
-        # Set up basic configuration for logging
-        logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        
+      
         if should_print_init:
             print(colored(f"\n{self.name} initialized with provider={self.provider}, model={self.model}, json_mode={self.json_mode}, temp={self.temperature}", "red"))
 
@@ -293,8 +290,8 @@ class Intelisys:
             return base64.b64encode(byte_arr.getvalue()).decode('utf-8')
 
     def image(self, path_or_url: str, detail: str = "auto"):
-        if self.provider != "openai":
-            raise ValueError("The image method is only supported for the OpenAI provider.")
+        if self.provider not in ["openai", "openrouter"]:
+            raise ValueError("The image method is only supported for the OpenAI and OpenRouter providers.")
         
         if os.path.isfile(path_or_url):
             # It's a local file path
@@ -325,7 +322,7 @@ class Intelisys:
         self.logger.debug(f"Current message: {self.current_message}")
         self.logger.debug(f"Current image URLs: {self.image_urls}")
         
-        if self.provider == "openai":
+        if self.provider in ["openai", "openrouter"]:
             content = []
             if self.current_message:
                 content.append(self.current_message)
@@ -347,7 +344,7 @@ class Intelisys:
             self.logger.warning("No message to send")
             self.last_response = None
         
-        return self  # Return self for method chaining
+        return self
 
     def clear(self):
         self.current_message = None
@@ -422,7 +419,7 @@ class Intelisys:
             if self.json_mode and self.provider == "openai":
                 common_params["response_format"] = {"type": "json_object"}
             
-            self.logger.debug(f"OpenAI API call params: {common_params}")
+            self.logger.debug(f"API call params: {common_params}")
             return self.client.chat.completions.create(**common_params)
 
     def _handle_stream(self, response, color, should_print):
