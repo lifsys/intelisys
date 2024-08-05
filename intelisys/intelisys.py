@@ -9,15 +9,18 @@ import re
 import ast
 import json
 import os
+import base64
+import io
 from typing import Dict,Optional, Union, Tuple
 from contextlib import contextmanager
-
+from PIL import Image
 from anthropic import Anthropic, AsyncAnthropic
 from jinja2 import Template
 from openai import AsyncOpenAI, OpenAI
 from termcolor import colored
 import logging
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 def remove_preface(text: str) -> str:
@@ -172,7 +175,14 @@ class Intelisys:
         self.template_instruction = ""
         self.template_persona = ""
         self.template_data = {}
+        self.image_urls = []
+        self.current_message = None
+        
+        self.logger = logging.getLogger(__name__)
 
+        # Set up basic configuration for logging
+        logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        
         if should_print_init:
             print(colored(f"\n{self.name} initialized with provider={self.provider}, model={self.model}, json_mode={self.json_mode}, temp={self.temperature}", "red"))
 
@@ -251,34 +261,116 @@ class Intelisys:
             self.system_message += " Please return your response in JSON unless user has specified a system message."
         return self
 
+    def chat(self, user_input):
+        self.logger.debug(f"Chat method called with user input: {user_input}")
+        if self.current_message or self.image_urls:
+            self.send()  # Send any pending message before starting a new one
+        self.current_message = {"type": "text", "text": user_input}
+        return self
+
+    def _encode_image(self, image_path: str) -> str:
+        with Image.open(image_path) as img:
+            # Convert to RGB mode if it's not already
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+            
+            # Create a byte stream
+            byte_arr = io.BytesIO()
+            # Save as PNG for lossless compression
+            img.save(byte_arr, format='PNG')
+            # Get the byte string and encode to base64
+            return base64.b64encode(byte_arr.getvalue()).decode('utf-8')
+
+    def image(self, path_or_url: str, detail: str = "auto"):
+        if self.provider != "openai":
+            raise ValueError("The image method is only supported for the OpenAI provider.")
+        
+        if os.path.isfile(path_or_url):
+            # It's a local file path
+            encoded_image = self._encode_image(path_or_url)
+            image_data = {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/png;base64,{encoded_image}",
+                    "detail": detail
+                }
+            }
+        else:
+            # It's a URL
+            image_data = {
+                "type": "image_url",
+                "image_url": {
+                    "url": path_or_url,
+                    "detail": detail
+                }
+            }
+        
+        self.image_urls.append(image_data)
+        self.logger.debug(f"Added image: {path_or_url}")
+        return self
+
+    def send(self):
+        self.logger.debug(f"Send method called")
+        self.logger.debug(f"Current message: {self.current_message}")
+        self.logger.debug(f"Current image URLs: {self.image_urls}")
+        
+        if self.provider == "openai":
+            content = []
+            if self.current_message:
+                content.append(self.current_message)
+            content.extend(self.image_urls)
+            if content:
+                self.add_message("user", content)
+                self.logger.debug(f"Added message with content: {content}")
+        else:
+            if self.current_message:
+                self.add_message("user", self.current_message["text"])
+        
+        self.current_message = None
+        self.image_urls = []  # Clear the image URLs after adding them to the history
+        self.logger.debug("Cleared current message and image URLs")
+        
+        if self.history:
+            self.last_response = self.get_response()
+        else:
+            self.logger.warning("No message to send")
+            self.last_response = None
+        
+        return self  # Return self for method chaining
+
+    def clear(self):
+        self.current_message = None
+        self.image_urls = []
+        self.logger.debug("Cleared current message and image URLs without sending")
+        return self
     def add_message(self, role, content):
         if role == "user" and self.max_words_per_message:
-            content += f" please use {self.max_words_per_message} words or less"
-        self.history.append({"role": role, "content": str(content)})
+            if isinstance(content, str):
+                content += f" please use {self.max_words_per_message} words or less"
+            elif isinstance(content, list) and content and isinstance(content[0], dict) and content[0].get('type') == 'text':
+                content[0]['text'] += f" please use {self.max_words_per_message} words or less"
+
+        self.history.append({"role": role, "content": content})
+        self.logger.debug(f"Added message: role={role}, content={content}")
         return self
 
-    def chat(self, user_input, **kwargs):
-        self.add_message("user", user_input)
-        kwargs.pop('provider', None)
-        self.last_response = self.get_response(**kwargs)
-        return self
-
-    def get_response(self, color=None, should_print=True, **kwargs):
-        color = color or self.print_color
-        max_tokens = kwargs.pop('max_tokens', self.max_tokens if self.max_tokens is not None else (4000 if self.provider != "anthropic" else 8192))  # Use self.max_tokens if provided
+    def get_response(self):
+        self.logger.debug("get_response method called")
+        max_tokens = self.max_tokens if self.max_tokens is not None else (4000 if self.provider != "anthropic" else 8192)
 
         for attempt in range(self.max_retry):
             try:
-                response = self._create_response(max_tokens, **kwargs)
+                self.logger.debug(f"Attempt {attempt + 1} to get response")
+                response = self._create_response(max_tokens)
                 
-                assistant_response = self._handle_stream(response, color, should_print) if self.stream else self._handle_non_stream(response)
+                assistant_response = self._handle_stream(response, self.print_color, True) if self.stream else self._handle_non_stream(response)
 
                 if self.json_mode:
                     if self.provider == "openai":
                         try:
                             assistant_response = json.loads(assistant_response)
                         except json.JSONDecodeError as json_error:
-                            print(f"JSON decoding error: {json_error}")
+                            self.logger.error(f"JSON decoding error: {json_error}")
                             raise
                     else:
                         assistant_response = safe_json_loads(assistant_response, error_prefix="Intelisys JSON parsing: ")
@@ -287,7 +379,7 @@ class Intelisys:
                 self.trim_history()
                 return assistant_response
             except Exception as e:
-                print(f"Error on attempt {attempt + 1}/{self.max_retry}: {e}")
+                self.logger.error(f"Error on attempt {attempt + 1}/{self.max_retry}: {e}")
                 if attempt < self.max_retry - 1:
                     import time
                     time.sleep(1)
@@ -295,6 +387,7 @@ class Intelisys:
                     raise Exception(f"Max retries reached. Last error: {e}")
 
     def _create_response(self, max_tokens, **kwargs):
+        self.logger.debug(f"Creating response with max_tokens={max_tokens}")
         if self.provider == "anthropic":
             return self.client.messages.create(
                 model=self.model,
@@ -318,6 +411,7 @@ class Intelisys:
             if self.json_mode and self.provider == "openai":
                 common_params["response_format"] = {"type": "json_object"}
             
+            self.logger.debug(f"OpenAI API call params: {common_params}")
             return self.client.chat.completions.create(**common_params)
 
     def _handle_stream(self, response, color, should_print):
@@ -346,13 +440,10 @@ class Intelisys:
         return self
 
     def results(self):
-        """
-        Returns the last response from the AI model.
-
-        Returns:
-            The last response from the AI model, which could be a string or a dictionary (if in JSON mode).
-        """
+        if self.last_response is None:
+            self.last_response = self.send()
         return self.last_response
+
 
     def set_default_template(self, template: str) -> 'Intelisys':
         self.default_template = template
