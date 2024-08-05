@@ -4,6 +4,17 @@ Provides intelligence/AI services for the Lifsys Enterprise.
 This module requires a 1Password Connect server to be available and configured.
 The OP_CONNECT_TOKEN and OP_CONNECT_HOST environment variables must be set
 for the onepasswordconnectsdk to function properly.
+
+Example usage for image OCR:
+    intelisys = Intelisys(provider="openai", model="gpt-4o-mini")
+    result = (intelisys
+     .chat("Please provide all the text in the following image(s).")
+     .image("http://www.mattmahoney.net/ocr/stock_gs200.jpg")
+     .image("/Users/lifsys/Documents/devhub/testingZone/_Archive/screen_small-2.png")
+     .send()
+     .results()
+    )
+    print(result)
 """
 import re
 import ast

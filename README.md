@@ -60,6 +60,17 @@ print(response)
 intelisys_json = Intelisys(name="JSONAssistant", provider="openai", model="gpt-4", json_mode=True)
 response = intelisys_json.chat("List 3 quantum computing concepts").results()
 print(response)  # This will be a Python dictionary
+
+# Image OCR example
+intelisys = Intelisys(provider="openai", model="gpt-4o-mini")
+result = (intelisys
+ .chat("Please provide all the text in the following image(s).")
+ .image("http://www.mattmahoney.net/ocr/stock_gs200.jpg")
+ .image("/Users/lifsys/Documents/devhub/testingZone/_Archive/screen_small-2.png")
+ .send()
+ .results()
+)
+print(result)
 ```
 
 ## Advanced Usage
