@@ -118,18 +118,47 @@ def safe_json_loads(json_str: str, error_prefix: str = "") -> Dict:
         raise ValueError(f"{error_prefix}Failed to parse JSON after multiple attempts.")
 
 class Intelisys:
+    """
+    A class for interacting with various AI models and services.
+
+    This class provides a unified interface for working with OpenAI, Anthropic, OpenRouter, and Groq APIs.
+    It supports both synchronous and asynchronous operations, template-based chats, and image inputs.
+
+    Attributes:
+        SUPPORTED_PROVIDERS (set): A set of supported AI providers.
+        DEFAULT_MODELS (dict): Default models for each supported provider.
+
+    Args:
+        name (str): Name of the Intelisys instance.
+        api_key (str, optional): API key for the chosen provider. If not provided, it will be fetched from environment or 1Password.
+        max_history_words (int): Maximum number of words to keep in conversation history.
+        max_words_per_message (int, optional): Maximum number of words per message.
+        json_mode (bool): Whether to return responses in JSON format.
+        stream (bool): Whether to stream the response.
+        use_async (bool): Whether to use asynchronous methods.
+        max_retry (int): Maximum number of retries for API calls.
+        provider (str): The AI provider to use (e.g., "openai", "anthropic").
+        model (str, optional): The specific model to use. If not provided, a default will be used.
+        should_print_init (bool): Whether to print initialization information.
+        print_color (str): Color to use for printed output.
+        temperature (float): Temperature setting for the AI model.
+        max_tokens (int, optional): Maximum number of tokens in the response.
+        log (Union[str, int]): Logging level.
+    """
+
     SUPPORTED_PROVIDERS = {"openai", "anthropic", "openrouter", "groq"}
     DEFAULT_MODELS = {
         "openai": "gpt-4o",
-        "anthropic": "claude-3-5-sonnet-20240620",
+        "anthropic": "claude-3-opus-20240229",
         "openrouter": "meta-llama/llama-3.1-405b-instruct",
         "groq": "llama-3.1-8b-instant"
     }
 
-    def __init__(self, name="Intelisys", api_key=None, max_history_words=10000,
-                 max_words_per_message=None, json_mode=False, stream=False, use_async=False,
-                 max_retry=10, provider="anthropic", model=None, should_print_init=False,
-                 print_color="green", temperature=0, max_tokens=None, log: Union[str, int] = "WARNING"):
+    def __init__(self, name: str = "Intelisys", api_key: Optional[str] = None, max_history_words: int = 10000,
+                 max_words_per_message: Optional[int] = None, json_mode: bool = False, stream: bool = False, 
+                 use_async: bool = False, max_retry: int = 10, provider: str = "anthropic", model: Optional[str] = None, 
+                 should_print_init: bool = False, print_color: str = "green", temperature: float = 0, 
+                 max_tokens: Optional[int] = None, log: Union[str, int] = "WARNING"):
         
         # Set up logger
         self.logger = logging.getLogger(f"{name}")
@@ -221,7 +250,7 @@ class Intelisys:
         except Exception as e:
             raise Exception(f"1Password Connect Error: {e}")
         
-    def _get_api_key(self):
+    def _get_api_key(self) -> str:
         env_var_map = {
             "openai": "OPENAI_API_KEY",
             "anthropic": "ANTHROPIC_API_KEY",
