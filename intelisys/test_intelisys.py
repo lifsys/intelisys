@@ -1,7 +1,7 @@
 import pytest
 import json
 from unittest.mock import patch, MagicMock
-from intelisys import Intelisys, safe_json_loads
+from intelisys import Intelisys, safe_json_loads, iterative_llm_fix_json
 
 @pytest.fixture
 def intelisys_instance():
@@ -58,7 +58,7 @@ def test_iterative_llm_fix_json(mock_intelisys):
     mock_intelisys.return_value = mock_instance
     mock_instance.results.return_value = '{"fixed": "json"}'
 
-    result = intelisys.iterative_llm_fix_json('{"broken: "json"}')
+    result = iterative_llm_fix_json('{"broken: "json"}')
     assert result == '{"fixed": "json"}'
 
 @pytest.mark.asyncio
