@@ -9,7 +9,12 @@ Intelisys is a powerful Python library that provides a unified interface for int
 - Ensured consistency in version numbers across the package
 - Maintained all improvements from previous versions
 - Updated documentation to reflect the latest changes
-- [Add any new features or improvements specific to version 0.3.15 here]
+- Enhanced error handling and logging capabilities
+- Improved JSON parsing with fallback to safe_json_loads
+- Added support for image input in chat method
+- Implemented clear() method for resetting current message and image URLs
+- Updated default models for various providers
+- Improved async methods for better performance
 
 ## Installation
 

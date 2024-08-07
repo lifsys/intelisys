@@ -8,18 +8,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Enhanced error handling and logging capabilities
+- Improved JSON parsing with fallback to safe_json_loads
+- Added support for image input in chat method
+- Implemented clear() method for resetting current message and image URLs
 
 ### Changed
-
-### Deprecated
-
-### Removed
+- Updated default models for various providers
+- Improved async methods for better performance
 
 ### Fixed
+- Minor bug fixes and performance improvements
 
-### Security
+## [0.3.15] - 2024-08-06
+### Added
+- Enhanced error handling and logging capabilities
+- Improved JSON parsing with fallback to safe_json_loads
+- Added support for image input in chat method
+- Implemented clear() method for resetting current message and image URLs
 
-## [0.3.10] - 2024-08-15
+### Changed
+- Updated default models for various providers
+- Improved async methods for better performance
+- Prepared package for PyPI update
+- Updated version number to 0.3.15 in all relevant files
+- Ensured consistency in version numbers across the package
+- Maintained all improvements from previous versions
+
+### Fixed
+- Minor bug fixes and performance improvements
+
+## [0.3.14] - 2024-08-05
 ### Changed
 - Prepared package for PyPI update
 - Updated version number to 0.3.10 in all relevant files
