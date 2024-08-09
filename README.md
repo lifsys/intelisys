@@ -57,21 +57,19 @@ from intelisys import Intelisys
 
 # Basic usage
 intelisys = Intelisys(name="MyAssistant", provider="openai", model="gpt-4")
-response = intelisys.chat("Explain quantum computing").send().results()
+response = intelisys.chat("Explain quantum computing")
 print(response)
 
 # Chaining example
 result = (Intelisys(provider="openai", model="gpt-4")
     .chat("Explain the concept of")
     .chat("quantum entanglement")
-    .chat("in simple terms")
-    .send()
-    .results())
+    .chat("in simple terms"))
 print(result)
 
 # JSON mode
 intelisys_json = Intelisys(name="JSONAssistant", provider="openai", model="gpt-4", json_mode=True)
-response = intelisys_json.chat("List 3 quantum computing concepts").send().results()
+response = intelisys_json.chat("List 3 quantum computing concepts")
 print(response)  # This will be a Python dictionary
 
 # Image OCR example
@@ -79,9 +77,7 @@ intelisys = Intelisys(provider="openai", model="gpt-4-vision-preview")
 result = (intelisys
     .chat("Please provide all the text in the following image(s).")
     .image("http://www.mattmahoney.net/ocr/stock_gs200.jpg")
-    .image("/path/to/local/image.png")
-    .send()
-    .results())
+    .image("/path/to/local/image.png"))
 print(result)
 ```
 
@@ -95,26 +91,26 @@ import asyncio
 intelisys = Intelisys(name="TemplateAssistant", provider="anthropic", model="claude-3-opus-20240229")
 render_data = {"topic": "artificial intelligence"}
 template = "Explain {{topic}} in simple terms."
-response = intelisys.template_chat(render_data, template).results()
+response = intelisys.template_chat(render_data, template)
 print(response)
 
 # Asynchronous chat
 async def async_chat():
     intelisys = Intelisys(name="AsyncAssistant", provider="anthropic", model="claude-3-opus-20240229")
     response = await intelisys.chat_async("What are the implications of AGI?")
-    print(await response.results())
+    print(response)
 
 asyncio.run(async_chat())
 
 # Using context manager for temporary template and persona changes
 intelisys = Intelisys(name="ContextAssistant", provider="openai", model="gpt-4")
 with intelisys.template_context(template="Summarize {{topic}} in one sentence.", persona="You are a concise summarizer."):
-    response = intelisys.template_chat({"topic": "quantum entanglement"}).results()
+    response = intelisys.template_chat({"topic": "quantum entanglement"})
     print(response)
 
 # Using retry mechanism
 intelisys = Intelisys(name="RetryAssistant", provider="openai", model="gpt-4", max_retry=5)
-response = intelisys.chat("This might fail, but we'll retry").send().results()
+response = intelisys.chat("This might fail, but we'll retry")
 print(response)
 ```
 
