@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "intelisys"
-version = "0.4.1"
+version = "0.4.2"
 description = "Intelligence/AI services for the Lifsys Enterprise"
 readme = "README.md"
 authors = [{name = "Lifsys Enterprise", email = "contact@lifsys.com"}]
 license = {file = "LICENSE"}
 requires-python = ">=3.7"
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
@@ -22,7 +22,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
 ]
-keywords = ["ai", "intelligence", "openai", "anthropic", "google"]
+keywords = ["ai", "intelligence", "openai", "anthropic", "google", "groq", "openrouter"]
 dependencies = [
     "openai>=1.0.0",
     "litellm>=1.0.0",

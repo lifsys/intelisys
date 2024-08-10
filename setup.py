@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="intelisys",
-    version="0.4.1",
+    version="0.4.2",
     author="Lifsys Enterprise",
     author_email="contact@lifsys.com",
     description="Intelligence/AI services for the Lifsys Enterprise",
@@ -42,5 +42,10 @@ setup(
             "flake8>=3.9",
             "black>=21.5b1",
         ],
+    },
+    project_urls={
+        "Documentation": "https://intelisys.readthedocs.io/",
+        "Source": "https://github.com/lifsys/intelisys",
+        "Tracker": "https://github.com/lifsys/intelisys/issues",
     },
 )
