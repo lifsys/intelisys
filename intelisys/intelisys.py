@@ -30,9 +30,9 @@ from termcolor import colored
 import logging
 
 # Set up the root logger
-LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
+LOG_FORMAT = "%(asctime)s %(levelname)s - %(name)s: %(message)s"
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
-logger = logging.getLogger("Global")
+logger = logging.getLogger("main")
 
 def remove_preface(text: str) -> str:
     """Remove any prefaced text before the start of JSON content."""
@@ -152,7 +152,7 @@ class Intelisys:
         intelisys = Intelisys(provider="openai", model="gpt-4")
         response = intelisys.chat("Hello, how are you?").get_response()
     """
-    LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
+    LOG_FORMAT = "%(asctime)s %(levelname)s - %(name)s: %(message)s"
 
     @classmethod
     def _configure_logger(cls, name: str, level: Union[int, str] = "WARNING"):
@@ -205,7 +205,7 @@ class Intelisys:
         
         # Set up logger
         logging.basicConfig(format=self.LOG_FORMAT)
-        self.logger = logging.getLogger(f"{name}")
+        self.logger = logging.getLogger("init")
         self.set_log_level(log)
         
         self.logger.info(f"Initializing Intelisys instance '{name}' with provider={provider}, model={model}")
@@ -376,8 +376,9 @@ class Intelisys:
         Usage:
             response = intelisys.chat("What is the capital of France?").get_response()
         """
-        self.logger.info(f"Chat method called")
-        self.logger.debug(f"User input: {user_input[:50]}...")
+        logger = logging.getLogger("chat")
+        logger.info("Method called")
+        logger.debug(f"User input: {user_input[:50]}...")
         if self.current_message:
             self.get_response()  # Send any pending message before starting a new one
         self.current_message = {"type": "text", "text": user_input}
@@ -439,7 +440,8 @@ class Intelisys:
         Usage:
             response = intelisys.chat("Hello").get_response()
         """
-        self.logger.info("get_response method called")
+        logger = logging.getLogger("get_response")
+        logger.info("Method called")
         if self.current_message:
             self.add_message("user", self.current_message["text"])
         
@@ -499,15 +501,16 @@ class Intelisys:
             return self.client.chat.completions.create(**common_params, **kwargs)
 
     def _handle_response(self, response):
-        self.logger.info("Handling response")
+        logger = logging.getLogger("handle_response")
+        logger.info("Handling response")
         if self.stream:
-            self.logger.debug("Handling stream response")
+            logger.debug("Handling stream response")
             assistant_response = self._handle_stream(response, self.print_color, True)
         else:
-            self.logger.debug("Handling non-stream response")
+            logger.debug("Handling non-stream response")
             assistant_response = self._handle_non_stream(response)
 
-        self.logger.debug(f"Raw assistant response: {assistant_response}")
+        logger.debug(f"Raw assistant response: {assistant_response}")
 
         if assistant_response is None:
             raise ValueError("Received None response from assistant")
