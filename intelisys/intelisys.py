@@ -30,9 +30,9 @@ from termcolor import colored
 import logging
 
 # Set up the root logger
-LOG_FORMAT = "%(asctime)s %(levelname)s - %(name)s: %(message)s"
-logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
-logger = logging.getLogger("main")
+LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+logging.basicConfig(level=logging.WARNING, format=LOG_FORMAT)
+logger = logging.getLogger(__name__)
 
 def remove_preface(text: str) -> str:
     """Remove any prefaced text before the start of JSON content."""
@@ -155,7 +155,7 @@ class Intelisys:
     LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
     @classmethod
-    def _configure_logger(cls, name: str, level: Union[int, str] = "WARNING"):
+    def _configure_logger(cls, name: str, level: Union[int, str] = logging.WARNING):
         logger = logging.getLogger(name)
         logger.setLevel(level)
         
@@ -205,8 +205,7 @@ class Intelisys:
         
         # Set up logger
         logging.basicConfig(format=self.LOG_FORMAT)
-        self.logger = logging.getLogger("init")
-        self.set_log_level(log)
+        self.logger = self._configure_logger(__name__, log)
         
         self.logger.info(f"Initializing Intelisys instance '{name}' with provider={provider}, model={model}")
         
