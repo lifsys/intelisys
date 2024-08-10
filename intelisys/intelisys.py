@@ -11,9 +11,7 @@ Example usage for image OCR:
     result = (intelisys
     .chat("Historical analysis of language use in the following image(s). Please step through each area of the image and extract all text.")
     .image("/Users/lifsys/Documents/devhub/testingZone/_Archive/screen_small-2.png")
-    .send()
-    .results()
-    )
+    .get_response()    )
     result
 """
 import re
@@ -58,66 +56,104 @@ def locate_json_error(json_str: str, error_msg: str) -> Tuple[int, int, str]:
     pointer = f"{' ' * min(20, col_no - 1)}^"
     return line_no, col_no, f"{context}\n{pointer}"
 
-def iterative_llm_fix_json(json_str: str, max_attempts: int = 5) -> str:
-    """Iteratively use an LLM to fix JSON formatting issues."""
-    prompts = [
-        "The following is a JSON string that has formatting issues. Please fix any errors and return only the corrected JSON:",
-        "The previous attempt to fix the JSON failed. Please try again, focusing on common JSON syntax errors like missing commas, unmatched brackets, or incorrect quotation marks:",
-        "The JSON is still invalid. Please break down the JSON structure, fix each part separately, and then reassemble it into a valid JSON string:",
-        "The JSON remains invalid. Please simplify the structure if possible, removing any nested objects or arrays that might be causing issues:",
-        "As a last resort, please rewrite the entire JSON structure from scratch based on the information contained within it, ensuring it's valid JSON:",
-    ]
-
-    for prompt in prompts[:max_attempts]:
+def iterative_llm_fix_json(json_string: str, max_attempts: int = 5, intelisys_instance=None) -> str:
+    print(f"Starting iterative_llm_fix_json with input: {json_string}")
+    if intelisys_instance is None:
+        intelisys_instance = Intelisys(provider="openai", model="gpt-3.5-turbo", api_key="dummy_key")
+    attempts = 0
+    
+    while attempts < max_attempts:
+        # Always attempt to "fix" the JSON, even if it's already valid
+        prompt = f"Fix this JSON: {json_string}"
+        print(f"Sending prompt to AI: {prompt}")
+        response = intelisys_instance.chat(prompt).get_response()
+        print(f"Received response from AI: {response}")
+        
         try:
-            fixed_json = Intelisys(
-                provider="openai", 
-                model="gpt-4o-mini",
-                json_mode=True) \
-                .set_system_message("Correct the JSON and return only the fixed JSON.") \
-                .chat(f"{prompt}\n\n{json_str}") \
-                .results()
-            json.loads(fixed_json)  # Validate the JSON
-            return fixed_json
-        except json.JSONDecodeError as e:
-            line_no, col_no, context = locate_json_error(fixed_json, str(e))
-            print(f"Fix attempt failed. Error at line {line_no}, column {col_no}:\n{context}")
-
-    raise ValueError("Failed to fix JSON after multiple attempts")
+            json.loads(response)  # Try to parse the AI's response
+            print(f"Successfully parsed JSON on attempt {attempts + 1}")
+            return response  # If successful, return the AI's response
+        except json.JSONDecodeError:
+            print(f"JSON parsing failed on attempt {attempts + 1}")
+            json_string = response  # Update json_string with the AI's response for the next attempt
+        
+        attempts += 1
+    
+    print(f"Reached max attempts. Returning: {json_string}")
+    return json_string  # Return the last attempt even if it's not valid JSON
 
 def safe_json_loads(json_str: str, error_prefix: str = "") -> Dict:
-    """Safely load JSON string, with iterative LLM-based error correction."""
+    """Safely convert any string input into JSON, with iterative LLM-based error correction."""
+    if json_str is None:
+        raise ValueError(f"{error_prefix}Input is None")
+
+    if not isinstance(json_str, str):
+        raise TypeError(f"{error_prefix}Input must be a string, not {type(json_str)}")
+
     json_str = remove_preface(json_str)
-    try:
-        return json.loads(json_str)
-    except json.JSONDecodeError as e:
-        line_no, col_no, context = locate_json_error(json_str, str(e))
-        print(f"{error_prefix}Initial JSON parsing failed at line {line_no}, column {col_no}:\n{context}")
-        
-        fix_attempts = [
-            iterative_llm_fix_json,
-            lambda s: Intelisys(
-                provider="openai", 
-                model="gpt-4o-mini",
-                json_mode=True) \
-                .set_system_message("Return only the fixed JSON.") \
-                .chat(f"Fix this JSON:\n{s}") \
-                .results(),
-            ast.literal_eval
-        ]
-        
-        for fix in fix_attempts:
-            try:
-                fixed_json = fix(json_str)
-                return json.loads(fixed_json) if isinstance(fixed_json, str) else fixed_json
-            except (json.JSONDecodeError, ValueError, SyntaxError):
-                continue
-        
-        print(f"{error_prefix}JSON parsing failed after all correction attempts.")
-        print(f"Problematic JSON string: {json_str}")
-        raise ValueError(f"{error_prefix}Failed to parse JSON after multiple attempts.")
+    
+    fix_attempts = [
+        json.loads,
+        lambda s: Intelisys(
+            provider="openai", 
+            model="gpt-4o-mini",
+            json_mode=True) \
+            .set_system_message("Convert the following text into valid JSON. If it's already valid JSON, return it as is.") \
+            .chat(f"Convert this to JSON:\n{s}") \
+            .get_response(),
+        iterative_llm_fix_json,
+        lambda s: ast.literal_eval(s) if s.strip().startswith('{') else {"content": s}
+    ]
+    
+    for fix in fix_attempts:
+        try:
+            fixed_json = fix(json_str)
+            if isinstance(fixed_json, dict):
+                return fixed_json
+            elif isinstance(fixed_json, str):
+                # If it's still a string, try to parse it as JSON one more time
+                return json.loads(fixed_json)
+        except Exception as e:
+            logging.debug(f"{error_prefix}JSON conversion attempt failed: {str(e)}")
+            continue
+    
+    # If all attempts fail, create a simple JSON object with the original string as content
+    logging.warning(f"{error_prefix}Failed to convert to JSON. Creating a simple JSON object.")
+    return {"content": json_str}
 
 class Intelisys:
+    """
+    A class for interacting with various AI providers and models.
+
+    This class provides a unified interface for chatting with AI models,
+    handling image inputs, and managing conversation history.
+
+    Attributes:
+        SUPPORTED_PROVIDERS (set): Set of supported AI providers.
+        DEFAULT_MODELS (dict): Default models for each provider.
+
+    Args:
+        name (str): Name of the Intelisys instance.
+        api_key (str, optional): API key for the chosen provider.
+        max_history_words (int): Maximum number of words to keep in conversation history.
+        max_words_per_message (int, optional): Maximum words per message.
+        json_mode (bool): Whether to return responses in JSON format.
+        stream (bool): Whether to stream the response.
+        use_async (bool): Whether to use async methods.
+        max_retry (int): Maximum number of retries for API calls.
+        provider (str): AI provider to use (e.g., "openai", "anthropic").
+        model (str, optional): Specific model to use.
+        should_print_init (bool): Whether to print initialization details.
+        print_color (str): Color for printed output.
+        temperature (float): Temperature for response generation.
+        max_tokens (int, optional): Maximum tokens for response.
+        log (str or int): Logging level.
+
+    Usage:
+        intelisys = Intelisys(provider="openai", model="gpt-4")
+        response = intelisys.chat("Hello, how are you?").get_response()
+    """
+
     SUPPORTED_PROVIDERS = {"openai", "anthropic", "openrouter", "groq"}
     DEFAULT_MODELS = {
         "openai": "gpt-4o",
@@ -130,6 +166,26 @@ class Intelisys:
                  max_words_per_message=None, json_mode=False, stream=False, use_async=False,
                  max_retry=10, provider="anthropic", model=None, should_print_init=False,
                  print_color="green", temperature=0, max_tokens=None, log: Union[str, int] = "WARNING"):
+        """
+        Initialize the Intelisys instance.
+
+        Args:
+            name (str): Name of the Intelisys instance.
+            api_key (str, optional): API key for the chosen provider.
+            max_history_words (int): Maximum number of words to keep in conversation history.
+            max_words_per_message (int, optional): Maximum words per message.
+            json_mode (bool): Whether to return responses in JSON format.
+            stream (bool): Whether to stream the response.
+            use_async (bool): Whether to use async methods.
+            max_retry (int): Maximum number of retries for API calls.
+            provider (str): AI provider to use (e.g., "openai", "anthropic").
+            model (str, optional): Specific model to use.
+            should_print_init (bool): Whether to print initialization details.
+            print_color (str): Color for printed output.
+            temperature (float): Temperature for response generation.
+            max_tokens (int, optional): Maximum tokens for response.
+            log (str or int): Logging level.
+        """
         
         # Set up logger
         self.logger = logging.getLogger(f"{name}")
@@ -148,6 +204,8 @@ class Intelisys:
         self.max_history_words = max_history_words
         self.max_words_per_message = max_words_per_message
         self.json_mode = json_mode
+        if self.json_mode and self.provider != "openai":
+            self.logger.warning(f"json_mode=True is set for provider '{self.provider}'. Note that only OpenAI has native JSON mode support. For other providers, we'll attempt to parse the response as JSON using safe_json_loads.")
         self.stream = stream
         self.use_async = use_async
         self.max_retry = max_retry
@@ -178,7 +236,16 @@ class Intelisys:
                           f"temperature={temperature}, max_tokens={max_tokens}")
 
     def set_log_level(self, level: Union[int, str]):
-        """Set the log level for this Intelisys instance."""
+        """
+        Set the log level for this Intelisys instance.
+
+        Args:
+            level (int or str): The log level to set. Can be a string (e.g., "DEBUG", "INFO")
+                                or an integer constant from the logging module.
+
+        Raises:
+            ValueError: If an invalid log level string is provided.
+        """
         if isinstance(level, str):
             level = level.upper()
             if not hasattr(logging, level):
@@ -260,6 +327,18 @@ class Intelisys:
         self.logger.debug(f"Client initialized: {type(self._client).__name__}")
 
     def set_system_message(self, message=None):
+        """
+        Set the system message for the conversation.
+
+        Args:
+            message (str, optional): The system message to set. If None, a default message is used.
+
+        Returns:
+            self: The Intelisys instance for method chaining.
+
+        Usage:
+            intelisys.set_system_message("You are a helpful assistant specialized in Python programming.")
+        """
         self.system_message = message or "You are a helpful assistant."
         if self.provider == "openai" and self.json_mode and "json" not in message.lower():
             self.system_message += " Please return your response in JSON unless user has specified a system message."
@@ -267,12 +346,24 @@ class Intelisys:
         return self
 
     def chat(self, user_input):
+        """
+        Send a chat message to the AI and prepare for a response.
+
+        Args:
+            user_input (str): The user's message to send to the AI.
+
+        Returns:
+            self: The Intelisys instance for method chaining.
+
+        Usage:
+            response = intelisys.chat("What is the capital of France?").get_response()
+        """
         self.logger.info(f"Chat method called")
-        self.logger.debug(f"User input: {user_input[:50]}...")  # Log first 50 chars
-        if self.current_message or self.image_urls:
-            self.send()  # Send any pending message before starting a new one
+        self.logger.debug(f"User input: {user_input[:50]}...")
+        if self.current_message:
+            self.get_response()  # Send any pending message before starting a new one
         self.current_message = {"type": "text", "text": user_input}
-        return self
+        return self.get_response()
 
     def _encode_image(self, image_path: str) -> str:
         self.logger.debug(f"Encoding image: {image_path}")
@@ -284,127 +375,144 @@ class Intelisys:
             return base64.b64encode(byte_arr.getvalue()).decode('utf-8')
 
     def image(self, path_or_url: str, detail: str = "auto"):
+        """
+        Add an image to the current message for image-based AI tasks.
+
+        Args:
+            path_or_url (str): Local file path or URL of the image.
+            detail (str, optional): Level of detail for image analysis (default is "auto").
+
+        Returns:
+            self: The Intelisys instance for method chaining.
+
+        Raises:
+            ValueError: If the provider doesn't support image inputs.
+            FileNotFoundError: If the local image file is not found.
+
+        Usage:
+            intelisys.chat("Describe this image").image("/path/to/image.jpg").get_response()
+        """
         self.logger.info(f"Image method called with path_or_url: {path_or_url}")
         if self.provider not in ["openai", "openrouter"]:
             raise ValueError("The image method is only supported for the OpenAI and OpenRouter providers.")
         
-        if os.path.isfile(path_or_url):
-            encoded_image = self._encode_image(path_or_url)
-            image_data = {
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/png;base64,{encoded_image}",
-                    "detail": detail
-                }
-            }
+        if path_or_url.startswith(('http://', 'https://')):
+            image_data = path_or_url
         else:
-            image_data = {
-                "type": "image_url",
-                "image_url": {
-                    "url": path_or_url,
-                    "detail": detail
-                }
-            }
-        
+            # Validate local file path
+            if not os.path.exists(path_or_url):
+                raise FileNotFoundError(f"Image file not found: {path_or_url}")
+            image_data = path_or_url
+
         self.image_urls.append(image_data)
         self.logger.debug(f"Added image: {path_or_url}")
         return self
 
-    def send(self):
-            self.logger.info("Send method called")
-            if self.current_message:
-                self.add_message("user", self.current_message["text"])
-            
-            self.current_message = None
-            self.image_urls = []
-            
-            if self.history:
-                response = self.get_response()
-                self.last_response = response
-            else:
-                self.logger.warning("No message to send")
-                self.last_response = None
-            
-            return self
-
-    def clear(self):
-        self.logger.info("Clear method called")
-        self.current_message = None
-        self.image_urls = []
-        self.logger.debug("Cleared current message and image URLs without sending")
-        return self
-
-    def add_message(self, role, content):
-        self.logger.info(f"Adding message with role: {role}")
-        self.logger.debug(f"Message content: {content[:50]}...")  # Log first 50 chars
-        if role == "user" and self.max_words_per_message:
-            if isinstance(content, str):
-                content += f" please use {self.max_words_per_message} words or less"
-            elif isinstance(content, list) and content and isinstance(content[0], dict) and content[0].get('type') == 'text':
-                content[0]['text'] += f" please use {self.max_words_per_message} words or less"
-
-        self.history.append({"role": role, "content": content})
-        return self
-
     def get_response(self):
+        """
+        Get the AI's response for the current message.
+
+        Returns:
+            str or dict: The AI's response, which may be a string or a JSON object if json_mode is True.
+
+        Raises:
+            ValueError: If there's no message to send or if the response is None.
+
+        Usage:
+            response = intelisys.chat("Hello").get_response()
+        """
         self.logger.info("get_response method called")
-        max_tokens = self.max_tokens if self.max_tokens is not None else (4000 if self.provider != "anthropic" else 8192)
-
-        for attempt in range(self.max_retry):
-            try:
-                self.logger.debug(f"Attempt {attempt + 1} to get response")
-                response = self._create_response(max_tokens)
-                
-                assistant_response = self._handle_stream(response, self.print_color, True) if self.stream else self._handle_non_stream(response)
-
-                if self.json_mode:
-                    if self.provider == "openai":
-                        try:
-                            assistant_response = json.loads(assistant_response)
-                        except json.JSONDecodeError as json_error:
-                            self.logger.error(f"JSON decoding error: {json_error}")
-                            raise
-                    else:
-                        assistant_response = safe_json_loads(assistant_response, error_prefix="Intelisys JSON parsing: ")
-
-                self.add_message("assistant", str(assistant_response))
-                self.trim_history()
-                return assistant_response
-            except Exception as e:
-                self.logger.error(f"Error on attempt {attempt + 1}/{self.max_retry}: {e}")
-                if attempt < self.max_retry - 1:
-                    import time
-                    time.sleep(1)
-                else:
-                    raise Exception(f"Max retries reached. Last error: {e}")
+        if self.current_message:
+            self.add_message("user", self.current_message["text"])
+        
+        self.current_message = None
+        
+        if self.history:
+            response = self._create_response(self.max_tokens or (4000 if self.provider != "anthropic" else 8192))
+            self.last_response = self._handle_response(response)
+        else:
+            self.logger.warning("No message to send")
+            self.last_response = None
+        
+        self.image_urls = []  # Clear image URLs after sending
+        return self.last_response
 
     def _create_response(self, max_tokens, **kwargs):
-        self.logger.debug(f"Creating response with max_tokens={max_tokens}")
+        common_params = {
+            "model": self.model,
+            "messages": self.history.copy(),
+            "stream": self.stream,
+            "temperature": self.temperature,
+        }
+
+        if max_tokens:
+            common_params["max_tokens"] = max_tokens
+
+        if self.image_urls and self.provider in ["openai", "openrouter"]:
+            last_message = common_params["messages"][-1]
+            content = []
+
+            if isinstance(last_message["content"], str):
+                content.append({"type": "text", "text": last_message["content"]})
+
+            for image_url in self.image_urls:
+                content.append({
+                    "type": "image_url",
+                    "image_url": {"url": image_url}
+                })
+
+            last_message["content"] = content
+
+        self.logger.debug(f"API call params: {common_params}")
+
+        if self.json_mode and self.provider == "openai":
+            common_params["response_format"] = {"type": "json_object"}
+        
+        self.logger.debug(f"API call params: {common_params}")
+
         if self.provider == "anthropic":
             return self.client.messages.create(
-                model=self.model,
                 system=self.system_message,
-                messages=self.history,
-                stream=self.stream,
-                temperature=self.temperature,
-                max_tokens=max_tokens,
                 extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
+                **common_params,
                 **kwargs
             )
         else:
-            common_params = {
-                "model": self.model,
-                "messages": [{"role": "system", "content": self.system_message}] + self.history,
-                "stream": self.stream,
-                "temperature": self.temperature,
-                "max_tokens": max_tokens,
-                **kwargs
-            }
-            if self.json_mode and self.provider == "openai":
-                common_params["response_format"] = {"type": "json_object"}
-            
-            self.logger.debug(f"API call params: {common_params}")
-            return self.client.chat.completions.create(**common_params)
+            return self.client.chat.completions.create(**common_params, **kwargs)
+
+    def _handle_response(self, response):
+        self.logger.info("Handling response")
+        if self.stream:
+            self.logger.debug("Handling stream response")
+            assistant_response = self._handle_stream(response, self.print_color, True)
+        else:
+            self.logger.debug("Handling non-stream response")
+            assistant_response = self._handle_non_stream(response)
+
+        self.logger.debug(f"Raw assistant response: {assistant_response}")
+
+        if assistant_response is None:
+            raise ValueError("Received None response from assistant")
+
+        if self.json_mode:
+            self.logger.debug("JSON mode is enabled, attempting to parse response")
+            if self.provider == "openai":
+                try:
+                    assistant_response = json.loads(assistant_response)
+                except json.JSONDecodeError as json_error:
+                    self.logger.error(f"OpenAI JSON decoding error: {json_error}")
+                    raise
+            else:
+                try:
+                    assistant_response = safe_json_loads(assistant_response, error_prefix="Intelisys JSON parsing: ")
+                except Exception as json_error:
+                    self.logger.error(f"safe_json_loads error: {json_error}")
+                    raise
+
+        self.logger.debug(f"Final processed assistant response: {assistant_response}")
+        self.add_message("assistant", str(assistant_response))
+        self.trim_history()
+        return assistant_response
 
     def _handle_stream(self, response, color, should_print):
         self.logger.debug("Handling stream response")
@@ -437,18 +545,17 @@ class Intelisys:
         self.logger.debug(f"History trimmed. Current word count: {words_count}")
         return self
 
-    def results(self):
-        self.logger.info("Results method called")
-        if self.last_response is None:
-            self.logger.warning("last_response is None, calling send() method")
-            self.last_response = self.send()
-    
-        if isinstance(self.last_response, Intelisys):
-            self.logger.warning("last_response is an Intelisys instance, returning None")
-            return None
-        
-        self.logger.info(f"Returning last_response: {self.last_response}")
-        return self.last_response
+    def add_message(self, role, content):
+        self.logger.info(f"Adding message with role: {role}")
+        self.logger.debug(f"Message content: {content[:50]}...")  # Log first 50 chars
+        if role == "user" and self.max_words_per_message:
+            if isinstance(content, str):
+                content += f" please use {self.max_words_per_message} words or less"
+            elif isinstance(content, list) and content and isinstance(content[0], dict) and content[0].get('type') == 'text':
+                content[0]['text'] += f" please use {self.max_words_per_message} words or less"
+
+        self.history.append({"role": role, "content": content})
+        return self
 
     def set_default_template(self, template: str) -> 'Intelisys':
         self.logger.info("Setting default template")
@@ -478,8 +585,28 @@ class Intelisys:
     def template_chat(self, 
                     render_data: Optional[Dict[str, Union[str, int, float]]] = None, 
                     template: Optional[str] = None, 
-                    persona: Optional[str] = None, 
-                    return_self: bool = True) -> Union['Intelisys', Dict]:
+                    persona: Optional[str] = None) -> Union[str, Dict]:
+        """
+        Send a chat message using a template and get the AI's response.
+
+        Args:
+            render_data (dict, optional): Data to render the template with.
+            template (str, optional): The template string to use. If None, uses the default template.
+            persona (str, optional): The persona to use for the system message. If None, uses the default persona.
+
+        Returns:
+            str or dict: The AI's response, which may be a string or a JSON object if json_mode is True.
+
+        Raises:
+            ValueError: If there's an error rendering the template.
+
+        Usage:
+            response = intelisys.template_chat(
+                render_data={"name": "Alice", "question": "What's the weather like?"},
+                template="Hello {{name}}, {{question}}",
+                persona="You are a weather expert."
+            )
+        """
         self.logger.info("Template chat method called")
         try:
             template = Template(template or self.default_template)
@@ -491,15 +618,12 @@ class Intelisys:
             raise ValueError(f"Invalid template: {e}")
 
         self.set_system_message(persona or self.default_persona)
-        response = self.chat(prompt).send().results()  # Call results() here
+        response = self.chat(prompt)
 
         self.last_response = response
         self.logger.info(f"template_chat response: {self.last_response}")
 
-        if return_self:
-            return self
-        else:
-            return self.last_response
+        return self.last_response
 
     @contextmanager
     def template_context(self, template: Optional[str] = None, persona: Optional[str] = None):
@@ -520,7 +644,7 @@ class Intelisys:
         self.logger.info("Async chat method called")
         await self.add_message_async("user", user_input)
         self.last_response = await self.get_response_async(**kwargs)
-        return self
+        return self.last_response
 
     async def add_message_async(self, role, content):
         self.logger.info(f"Async adding message with role: {role}")
@@ -610,6 +734,28 @@ class Intelisys:
                                 template: Optional[str] = None, 
                                 persona: Optional[str] = None, 
                                 parse_json: bool = False) -> 'Intelisys':
+        """
+        Asynchronously send a chat message using a template and get the AI's response.
+
+        Args:
+            render_data (dict, optional): Data to render the template with.
+            template (str, optional): The template string to use. If None, uses the default template.
+            persona (str, optional): The persona to use for the system message. If None, uses the default persona.
+
+        Returns:
+            Intelisys: The Intelisys instance for method chaining.
+
+        Raises:
+            ValueError: If there's an error rendering the template or processing the response.
+
+        Usage:
+            response = await intelisys.template_chat_async(
+                render_data={"name": "Bob", "question": "What's the capital of France?"},
+                template="Hello {{name}}, {{question}}",
+                persona="You are a geography expert."
+            )
+            result = intelisys.last_response
+        """
         self.logger.info("Async template chat method called")
         try:
             template = Template(template or self.default_template)
@@ -622,8 +768,7 @@ class Intelisys:
 
         await self.set_system_message_async(persona or self.default_persona)
         response = await self.chat_async(prompt)
-        response = self.results()
-
+        
         if self.json_mode:
             if isinstance(response, dict):
                 self.last_response = response

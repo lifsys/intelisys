@@ -2,19 +2,19 @@
 
 Intelisys is a powerful Python library that provides a unified interface for interacting with various AI models and services. It offers seamless integration with OpenAI, Anthropic, OpenRouter, and Groq, making it an essential tool for AI-powered applications.
 
-## New in Version 0.3.15
+## Changelog
 
-- Prepared for PyPI update
-- Incremented version number to 0.3.15 across all relevant files
-- Ensured consistency in version numbers across the package
-- Maintained all improvements from previous versions
-- Updated documentation to reflect the latest changes
-- Enhanced error handling and logging capabilities
-- Improved JSON parsing with fallback to safe_json_loads
-- Added support for image input in chat method
-- Implemented clear() method for resetting current message and image URLs
+### [0.4.1] - 2024-08-12
+- Fixed breaking changes introduced in version 0.4.0
+- Improved error handling in template_chat method
+- Updated documentation to reflect recent changes
+
+### [0.4.0] - 2024-08-11
+- Major refactoring of the Intelisys class
+- Removed deprecated methods and attributes
 - Updated default models for various providers
-- Improved async methods for better performance
+- Improved async support
+- Enhanced error handling and logging
 
 ## Installation
 
@@ -58,12 +58,12 @@ from intelisys import Intelisys
 
 # Using Intelisys class
 intelisys = Intelisys(name="MyAssistant", provider="openai", model="gpt-4")
-response = intelisys.chat("Explain quantum computing").results()
+response = intelisys.chat("Explain quantum computing").get_response()
 print(response)
 
 # Using JSON mode
 intelisys_json = Intelisys(name="JSONAssistant", provider="openai", model="gpt-4", json_mode=True)
-response = intelisys_json.chat("List 3 quantum computing concepts").results()
+response = intelisys_json.chat("List 3 quantum computing concepts").get_response()
 print(response)  # This will be a Python dictionary
 
 # Image OCR example
@@ -72,8 +72,7 @@ result = (intelisys
  .chat("Please provide all the text in the following image(s).")
  .image("http://www.mattmahoney.net/ocr/stock_gs200.jpg")
  .image("/Users/lifsys/Documents/devhub/testingZone/_Archive/screen_small-2.png")
- .send()
- .results()
+ .get_response()
 )
 print(result)
 ```
@@ -88,26 +87,26 @@ import asyncio
 intelisys = Intelisys(name="TemplateAssistant", provider="anthropic", model="claude-3-5-sonnet-20240620")
 render_data = {"topic": "artificial intelligence"}
 template = "Explain {{topic}} in simple terms."
-response = intelisys.template_chat(render_data, template).results()
+response = intelisys.template_chat(render_data, template).get_response()
 print(response)
 
 # Asynchronous chat
 async def async_chat():
     intelisys = Intelisys(name="AsyncAssistant", provider="anthropic", model="claude-3-5-sonnet-20240620")
     response = await intelisys.chat_async("What are the implications of AGI?")
-    print(await response.results())
+    print(await response.get_response())
 
 asyncio.run(async_chat())
 
 # Using context manager for temporary template and persona changes
 intelisys = Intelisys(name="ContextAssistant", provider="openai", model="gpt-4")
 with intelisys.template_context(template="Summarize {{topic}} in one sentence.", persona="You are a concise summarizer."):
-    response = intelisys.template_chat({"topic": "quantum entanglement"}).get_last_response()
+    response = intelisys.template_chat({"topic": "quantum entanglement"}).get_response()
     print(response)
 
 # Using retry mechanism
 intelisys = Intelisys(name="RetryAssistant", provider="openai", model="gpt-4", max_retry=5)
-response = intelisys.chat("This might fail, but we'll retry").get_last_response()
+response = intelisys.chat("This might fail, but we'll retry").get_response()
 print(response)
 ```
 

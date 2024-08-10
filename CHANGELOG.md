@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2024-08-12
+### Fixed
+- Corrected breaking changes introduced in version 0.4.0
+- Improved error handling in template_chat method
+
+### Changed
+- Updated documentation to reflect recent changes
+
+## [0.4.0] - 2024-08-11
+### Added
+- Enhanced async support for improved performance
+- New error handling mechanisms for better debugging
+
+### Changed
+- Major refactoring of the Intelisys class for improved maintainability
+- Updated default models for various providers to latest versions
+- Improved logging system for better traceability
+
+### Removed
+- Deprecated methods and attributes that were no longer in use
+
 ## [Unreleased]
 
 ### Added

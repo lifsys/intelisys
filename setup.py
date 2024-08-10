@@ -1,28 +1,46 @@
 from setuptools import setup, find_packages
 
+with open("README.md", "r", encoding="utf-8") as fh:
+    long_description = fh.read()
+
 setup(
     name="intelisys",
-    version="0.3.15",  # Make sure this matches the version in intelisys/__init__.py
-    packages=find_packages(),
-    install_requires=[
-        "openai",
-        "litellm",
-        "jinja2",
-        "onepasswordconnectsdk",
-        "anthropic",
-        "pillow",
-        "termcolor",
-    ],
+    version="0.4.1",
     author="Lifsys Enterprise",
     author_email="contact@lifsys.com",
-    description="Provides intelligence/AI services for the Lifsys Enterprise",
-    long_description=open("README.md").read(),
+    description="Intelligence/AI services for the Lifsys Enterprise",
+    long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/lifsys/intelisys",
+    packages=find_packages(),
     classifiers=[
-        "Programming Language :: Python :: 3",
+        "Development Status :: 4 - Beta",
+        "Intended Audience :: Developers",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
     ],
-    python_requires=">=3.6",
+    python_requires=">=3.7",
+    install_requires=[
+        "openai>=1.0.0",
+        "litellm>=1.0.0",
+        "jinja2>=3.0.0",
+        "onepasswordconnectsdk>=1.0.0",
+        "anthropic>=0.3.0",
+        "pillow>=8.0.0",
+        "termcolor>=1.1.0",
+    ],
+    extras_require={
+        "dev": [
+            "pytest>=6.0",
+            "pytest-cov>=2.0",
+            "flake8>=3.9",
+            "black>=21.5b1",
+        ],
+    },
 )
