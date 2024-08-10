@@ -4,16 +4,16 @@ Intelisys is a powerful Python library that provides a unified interface for int
 
 ## Changelog
 
-### [0.4.8] - 2024-08-19
+### [0.4.9] - 2024-08-20
+- Incremented version number to 0.4.9
+- Improved logging functionality
 - Updated PyPI package configuration
-- Incremented version number to 0.4.8
-- Enhanced documentation in README.md
+- Enhanced error handling
+- Refined documentation in README.md
 - Ensured version consistency across all files
-- Improved error handling and logging
 - Updated installation and usage instructions
-- Refined JSON parsing capabilities
 
-### [0.4.7] - 2024-08-18
+### [0.4.8] - 2024-08-19
 - Updated PyPI package configuration
 - Incremented version number for new release
 - Enhanced documentation in README.md
