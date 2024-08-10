@@ -4,6 +4,13 @@ Intelisys is a powerful Python library that provides a unified interface for int
 
 ## Changelog
 
+### [0.4.6] - 2024-08-17
+- Updated PyPI package configuration
+- Incremented version number for new release
+- Enhanced documentation in README.md
+- Ensured version consistency across all files
+- Improved error handling and logging
+
 ### [0.4.5] - 2024-08-16
 - Updated PyPI package configuration
 - Incremented version number for new release
@@ -91,7 +98,7 @@ response = intelisys_json.chat("List 3 quantum computing concepts").get_response
 print(response)  # This will be a Python dictionary
 
 # Image OCR example
-intelisys = Intelisys(provider="openai", model="gpt-4o-mini")
+intelisys = Intelisys(provider="openai", model="gpt-4-vision-preview")
 result = (intelisys
  .chat("Please provide all the text in the following image(s).")
  .image("http://www.mattmahoney.net/ocr/stock_gs200.jpg")
@@ -108,7 +115,7 @@ from intelisys import Intelisys
 import asyncio
 
 # Template-based API call
-intelisys = Intelisys(name="TemplateAssistant", provider="anthropic", model="claude-3-5-sonnet-20240620")
+intelisys = Intelisys(name="TemplateAssistant", provider="anthropic", model="claude-3-opus-20240229")
 render_data = {"topic": "artificial intelligence"}
 template = "Explain {{topic}} in simple terms."
 response = intelisys.template_chat(render_data, template).get_response()
@@ -116,9 +123,9 @@ print(response)
 
 # Asynchronous chat
 async def async_chat():
-    intelisys = Intelisys(name="AsyncAssistant", provider="anthropic", model="claude-3-5-sonnet-20240620")
+    intelisys = Intelisys(name="AsyncAssistant", provider="anthropic", model="claude-3-opus-20240229")
     response = await intelisys.chat_async("What are the implications of AGI?")
-    print(await response.get_response())
+    print(await response.get_response_async())
 
 asyncio.run(async_chat())
 
@@ -138,8 +145,8 @@ print(response)
 
 Intelisys supports a wide range of AI providers and models:
 
-- OpenAI: Various GPT models including gpt-4
-- Anthropic: Claude models including claude-3-5-sonnet-20240620
+- OpenAI: Various GPT models including gpt-4 and gpt-4-vision-preview
+- Anthropic: Claude models including claude-3-opus-20240229
 - OpenRouter: Access to multiple AI models through a single API
 - Groq: Fast inference models
 
@@ -147,11 +154,11 @@ For a complete list of supported models, please refer to the `DEFAULT_MODELS` di
 
 ## Error Handling
 
-Intelisys now includes improved error handling and a retry mechanism for API calls. If an API call fails, the library will automatically retry the call up to the specified `max_retry` times (default is 10). This helps to handle temporary network issues or API rate limits.
+Intelisys includes improved error handling and a retry mechanism for API calls. If an API call fails, the library will automatically retry the call up to the specified `max_retry` times (default is 10). This helps to handle temporary network issues or API rate limits.
 
 ## JSON Parsing
 
-For JSON responses, Intelisys now uses a more robust parsing method. If the standard `json.loads()` fails, it falls back to `safe_json_loads()` from the `utilisys` library, which can handle some common JSON parsing errors.
+For JSON responses, Intelisys uses a robust parsing method. If the standard `json.loads()` fails, it falls back to `safe_json_loads()`, which can handle some common JSON parsing errors.
 
 ## API Reference
 
