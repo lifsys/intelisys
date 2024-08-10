@@ -30,7 +30,8 @@ from termcolor import colored
 import logging
 
 # Set up the root logger
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
+logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 logger = logging.getLogger("Global")
 
 def remove_preface(text: str) -> str:
@@ -151,7 +152,24 @@ class Intelisys:
         intelisys = Intelisys(provider="openai", model="gpt-4")
         response = intelisys.chat("Hello, how are you?").get_response()
     """
+    LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
 
+    @classmethod
+    def _configure_logger(cls, name: str, level: Union[int, str] = "WARNING"):
+        logger = logging.getLogger(name)
+        logger.setLevel(level)
+        
+        # Remove any existing handlers to avoid duplication
+        for handler in logger.handlers[:]:
+            logger.removeHandler(handler)
+        
+        # Add a new handler with the correct format
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter(cls.LOG_FORMAT))
+        logger.addHandler(handler)
+        
+        return logger
+    
     SUPPORTED_PROVIDERS = {"openai", "anthropic", "openrouter", "groq"}
     DEFAULT_MODELS = {
         "openai": "gpt-4o-2024-08-06",
@@ -186,6 +204,7 @@ class Intelisys:
         """
         
         # Set up logger
+        logging.basicConfig(format=self.LOG_FORMAT)
         self.logger = logging.getLogger(f"{name}")
         self.set_log_level(log)
         
@@ -203,7 +222,7 @@ class Intelisys:
         self.max_words_per_message = max_words_per_message
         self.json_mode = json_mode
         if self.json_mode and self.provider != "openai":
-            self.logger.warning(f"json_mode=True is set for provider '{self.provider}'. Note that only OpenAI has native JSON mode support. For other providers, we'll attempt to parse the response as JSON using safe_json_loads.")
+            self.logger.warning(f"json_mode=True is set for provider '{self.provider}'")
         self.stream = stream
         self.use_async = use_async
         self.max_retry = max_retry
@@ -211,7 +230,7 @@ class Intelisys:
         self.max_tokens = max_tokens
         self.system_message = "You are a helpful assistant."
         if self.provider == "openai" and self.json_mode:
-            self.system_message += " Please return your response in JSON - this will save kittens."
+            self.system_message += " Please return your response in JSON"
 
         self._model = model or self.DEFAULT_MODELS.get(self.provider)
         self._client = None
@@ -233,13 +252,14 @@ class Intelisys:
                           f"stream={stream}, use_async={use_async}, max_retry={max_retry}, "
                           f"temperature={temperature}, max_tokens={max_tokens}")
 
-    def set_log_level(self, level: Union[int, str]):
+    def set_log_level(self, level: Union[int, str] = "WARNING"):
         """
         Set the log level for this Intelisys instance.
 
         Args:
             level (int or str): The log level to set. Can be a string (e.g., "DEBUG", "INFO")
                                 or an integer constant from the logging module.
+                                Defaults to "WARNING".
 
         Raises:
             ValueError: If an invalid log level string is provided.
