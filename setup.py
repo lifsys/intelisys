@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="intelisys",
-    version="0.4.7",
+    version="0.4.8",
     author="Lifsys Enterprise",
     author_email="contact@lifsys.com",
     description="Intelligence/AI services for the Lifsys Enterprise",
