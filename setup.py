@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="intelisys",
-    version="0.4.3",
+    version="0.4.4",
     author="Lifsys Enterprise",
     author_email="contact@lifsys.com",
     description="Intelligence/AI services for the Lifsys Enterprise",
@@ -28,7 +28,6 @@ setup(
     python_requires=">=3.7",
     install_requires=[
         "openai>=1.0.0",
-        "litellm>=1.0.0",
         "jinja2>=3.0.0",
         "onepasswordconnectsdk>=1.0.0",
         "anthropic>=0.3.0",

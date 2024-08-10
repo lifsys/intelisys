@@ -1,4 +1,4 @@
-__version__ = "0.4.3"
+__version__ = "0.4.4"
 
 from .intelisys import Intelisys, safe_json_loads
 
