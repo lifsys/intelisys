@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "intelisys"
-version = "0.4.3"
+version = "0.4.5"
 description = "Intelligence/AI services for the Lifsys Enterprise"
 readme = "README.md"
 authors = [{name = "Lifsys Enterprise", email = "contact@lifsys.com"}]
@@ -25,7 +25,6 @@ classifiers = [
 keywords = ["ai", "intelligence", "openai", "anthropic", "google", "groq", "openrouter"]
 dependencies = [
     "openai>=1.0.0",
-    "litellm>=1.0.0",
     "jinja2>=3.0.0",
     "onepasswordconnectsdk>=1.0.0",
     "anthropic>=0.3.0",
