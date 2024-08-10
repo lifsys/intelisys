@@ -21,6 +21,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+testing/
 
 # PyInstaller
 *.manifest
@@ -64,3 +65,4 @@ ehthumbs.db
 Thumbs.db
 
 .tmux.conf
+.pytest_cache
