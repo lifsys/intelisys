@@ -1,3 +1,63 @@
+Metadata-Version: 2.1
+Name: intelisys
+Version: 0.3.15
+Summary: Intelligence/AI services for the Lifsys Enterprise
+Home-page: https://github.com/lifsys/intelisys
+Author: Lifsys Enterprise
+Author-email: Lifsys Enterprise <contact@lifsys.com>
+License: MIT License
+        
+        Copyright (c) 2024 Lifsys Enterprise
+        
+        Permission is hereby granted, free of charge, to any person obtaining a copy
+        of this software and associated documentation files (the "Software"), to deal
+        in the Software without restriction, including without limitation the rights
+        to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+        copies of the Software, and to permit persons to whom the Software is
+        furnished to do so, subject to the following conditions:
+        
+        The above copyright notice and this permission notice shall be included in all
+        copies or substantial portions of the Software.
+        
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+        OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+        SOFTWARE.
+        
+Project-URL: Homepage, https://github.com/lifsys/intelisys
+Project-URL: Documentation, https://intelisys.readthedocs.io/
+Project-URL: Repository, https://github.com/lifsys/intelisys.git
+Project-URL: Bug Tracker, https://github.com/lifsys/intelisys/issues
+Keywords: ai,intelligence,openai,anthropic,google
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Requires-Python: >=3.6
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: openai>=1.0.0
+Requires-Dist: litellm>=1.0.0
+Requires-Dist: jinja2>=3.0.0
+Requires-Dist: onepasswordconnectsdk>=1.0.0
+Requires-Dist: anthropic>=0.3.0
+Requires-Dist: pillow>=8.0.0
+Requires-Dist: termcolor>=1.1.0
+Provides-Extra: dev
+Requires-Dist: pytest>=6.0; extra == "dev"
+Requires-Dist: pytest-cov>=2.0; extra == "dev"
+Requires-Dist: flake8>=3.9; extra == "dev"
+Requires-Dist: black>=21.5b1; extra == "dev"
+
 # Intelisys
 
 Intelisys is a powerful Python library that provides a unified interface for interacting with various AI models and services. It offers seamless integration with OpenAI, Anthropic, OpenRouter, and Groq, making it an essential tool for AI-powered applications.

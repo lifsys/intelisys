@@ -16,20 +16,14 @@ Example usage for image OCR:
     )
     result
 """
-import ast
 import re
+import ast
 import json
 import os
 import base64
-import asyncio
-import hashlib
-import traceback
-from typing import Dict, Optional, Union, Tuple, List, Any, Callable
+import io
+from typing import Dict, Optional, Union, Tuple
 from contextlib import contextmanager
-from collections import deque
-from functools import lru_cache
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
 from PIL import Image
 from anthropic import Anthropic, AsyncAnthropic
 from jinja2 import Template
@@ -41,50 +35,101 @@ import logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S')
 
+def remove_preface(text: str) -> str:
+    """Remove any prefaced text before the start of JSON content."""
+    match: Optional[re.Match] = re.search(r"[\{\[]", text)
+    if match:
+        start: int = match.start()
+        return text[start:]
+    return text
+
+def locate_json_error(json_str: str, error_msg: str) -> Tuple[int, int, str]:
+    """Locate the position of the JSON error and return the surrounding context."""
+    match = re.search(r"line (\d+) column (\d+)", error_msg)
+    if not match:
+        return 0, 0, "Could not parse error message"
+    line_no, col_no = map(int, match.groups())
+    lines = json_str.splitlines()
+    if line_no > len(lines):
+        return line_no, col_no, "Line number exceeds total lines in JSON string"
+    problematic_line = lines[line_no - 1]
+    start, end = max(0, col_no - 20), min(len(problematic_line), col_no + 20)
+    context = problematic_line[start:end]
+    pointer = f"{' ' * min(20, col_no - 1)}^"
+    return line_no, col_no, f"{context}\n{pointer}"
+
+def iterative_llm_fix_json(json_str: str, max_attempts: int = 5) -> str:
+    """Iteratively use an LLM to fix JSON formatting issues."""
+    prompts = [
+        "The following is a JSON string that has formatting issues. Please fix any errors and return only the corrected JSON:",
+        "The previous attempt to fix the JSON failed. Please try again, focusing on common JSON syntax errors like missing commas, unmatched brackets, or incorrect quotation marks:",
+        "The JSON is still invalid. Please break down the JSON structure, fix each part separately, and then reassemble it into a valid JSON string:",
+        "The JSON remains invalid. Please simplify the structure if possible, removing any nested objects or arrays that might be causing issues:",
+        "As a last resort, please rewrite the entire JSON structure from scratch based on the information contained within it, ensuring it's valid JSON:",
+    ]
+
+    for prompt in prompts[:max_attempts]:
+        try:
+            fixed_json = Intelisys(
+                provider="openai", 
+                model="gpt-4o-mini",
+                json_mode=True) \
+                .set_system_message("Correct the JSON and return only the fixed JSON.") \
+                .chat(f"{prompt}\n\n{json_str}") \
+                .results()
+            json.loads(fixed_json)  # Validate the JSON
+            return fixed_json
+        except json.JSONDecodeError as e:
+            line_no, col_no, context = locate_json_error(fixed_json, str(e))
+            print(f"Fix attempt failed. Error at line {line_no}, column {col_no}:\n{context}")
+
+    raise ValueError("Failed to fix JSON after multiple attempts")
+
+def safe_json_loads(json_str: str, error_prefix: str = "") -> Dict:
+    """Safely load JSON string, with iterative LLM-based error correction."""
+    json_str = remove_preface(json_str)
+    try:
+        return json.loads(json_str)
+    except json.JSONDecodeError as e:
+        line_no, col_no, context = locate_json_error(json_str, str(e))
+        print(f"{error_prefix}Initial JSON parsing failed at line {line_no}, column {col_no}:\n{context}")
+        
+        fix_attempts = [
+            iterative_llm_fix_json,
+            lambda s: Intelisys(
+                provider="openai", 
+                model="gpt-4o-mini",
+                json_mode=True) \
+                .set_system_message("Return only the fixed JSON.") \
+                .chat(f"Fix this JSON:\n{s}") \
+                .results(),
+            ast.literal_eval
+        ]
+        
+        for fix in fix_attempts:
+            try:
+                fixed_json = fix(json_str)
+                return json.loads(fixed_json) if isinstance(fixed_json, str) else fixed_json
+            except (json.JSONDecodeError, ValueError, SyntaxError):
+                continue
+        
+        print(f"{error_prefix}JSON parsing failed after all correction attempts.")
+        print(f"Problematic JSON string: {json_str}")
+        raise ValueError(f"{error_prefix}Failed to parse JSON after multiple attempts.")
+
 class Intelisys:
-    """
-    An enhanced class for interacting with various AI models and services.
-
-    This class provides a unified interface for working with OpenAI, Anthropic, OpenRouter, and Groq APIs.
-    It supports both synchronous and asynchronous operations, template-based chats, caching, concurrent processing,
-    and image inputs.
-
-    Attributes:
-        SUPPORTED_PROVIDERS (set): A set of supported AI providers.
-        DEFAULT_MODELS (dict): Default models for each supported provider.
-
-    Args:
-        name (str): Name of the Intelisys instance.
-        api_key (str, optional): API key for the chosen provider. If not provided, it will be fetched from environment or 1Password.
-        max_history_words (int): Maximum number of words to keep in conversation history.
-        max_words_per_message (int, optional): Maximum number of words per message.
-        json_mode (bool): Whether to return responses in JSON format.
-        stream (bool): Whether to stream the response.
-        use_async (bool): Whether to use asynchronous methods.
-        max_retry (int): Maximum number of retries for API calls.
-        provider (str): The AI provider to use (e.g., "openai", "anthropic").
-        model (str, optional): The specific model to use. If not provided, a default will be used.
-        should_print_init (bool): Whether to print initialization information.
-        print_color (str): Color to use for printed output.
-        temperature (float): Temperature setting for the AI model.
-        max_tokens (int, optional): Maximum number of tokens in the response.
-        log (Union[str, int]): Logging level.
-        use_cache (bool): Whether to use response caching.
-    """
-
     SUPPORTED_PROVIDERS = {"openai", "anthropic", "openrouter", "groq"}
     DEFAULT_MODELS = {
         "openai": "gpt-4o",
         "anthropic": "claude-3-5-sonnet-20240620",
         "openrouter": "meta-llama/llama-3.1-405b-instruct",
-        "groq": "llama-3.1-70b-versatile"
+        "groq": "llama-3.1-8b-instant"
     }
 
-    def __init__(self, name: str = "Intelisys", api_key: Optional[str] = None, max_history_words: int = 10000,
-                 max_words_per_message: Optional[int] = None, json_mode: bool = False, stream: bool = False, 
-                 use_async: bool = False, max_retry: int = 10, provider: str = "anthropic", model: Optional[str] = None, 
-                 should_print_init: bool = False, print_color: str = "green", temperature: float = 0, 
-                 max_tokens: Optional[int] = None, log: Union[str, int] = "WARNING", use_cache: bool = False):
+    def __init__(self, name="Intelisys", api_key=None, max_history_words=10000,
+                 max_words_per_message=None, json_mode=False, stream=False, use_async=False,
+                 max_retry=10, provider="anthropic", model=None, should_print_init=False,
+                 print_color="green", temperature=0, max_tokens=None, log: Union[str, int] = "WARNING"):
         
         # Set up logger
         self.logger = logging.getLogger(f"{name}")
@@ -96,27 +141,10 @@ class Intelisys:
         if self.provider not in self.SUPPORTED_PROVIDERS:
             self._raise_unsupported_provider_error()
         
-        self.history = deque(maxlen=max_history_words // 10)
-        self.max_history_words = max_history_words
-        
-        self.max_words_per_message = max_words_per_message
-        self.json_mode = json_mode
-        self.stream = stream
-        self.use_async = use_async
-        self.max_retry = max_retry
-        self.print_color = print_color
-        self.max_tokens = max_tokens
-        self.system_message = "You are a helpful assistant."
-        if self.provider == "openai" and self.json_mode:
-            self.system_message += " Please return your response in JSON - this will save kittens."
-
-        self._model = model or self.DEFAULT_MODELS.get(self.provider)
-        self._client = None
-        self.last_response = None
         self.name = name
         self._api_key = api_key
         self.temperature = temperature
-        self.history = deque(maxlen=max_history_words // 10)  # Estimate average words per message
+        self.history = []
         self.max_history_words = max_history_words
         self.max_words_per_message = max_words_per_message
         self.json_mode = json_mode
@@ -141,18 +169,13 @@ class Intelisys:
         self.image_urls = []
         self.current_message = None
         
-        self.use_cache = use_cache
-        self.error_callback: Optional[Callable[[Exception], None]] = None
-        
         if should_print_init:
             print(colored(f"\n{self.name} initialized with provider={self.provider}, model={self.model}, json_mode={self.json_mode}, temp={self.temperature}", "red"))
 
         self.logger.debug(f"Intelisys initialized with: name={name}, max_history_words={max_history_words}, "
                           f"max_words_per_message={max_words_per_message}, json_mode={json_mode}, "
                           f"stream={stream}, use_async={use_async}, max_retry={max_retry}, "
-                          f"temperature={temperature}, max_tokens={max_tokens}, use_cache={use_cache}")
-        
-        self.pending_images: List[str] = []
+                          f"temperature={temperature}, max_tokens={max_tokens}")
 
     def set_log_level(self, level: Union[int, str]):
         """Set the log level for this Intelisys instance."""
@@ -170,10 +193,6 @@ class Intelisys:
         close_matches = difflib.get_close_matches(self.provider, self.SUPPORTED_PROVIDERS, n=1, cutoff=0.6)
         suggestion = f"Did you mean '{close_matches[0]}'?" if close_matches else "Please check the spelling and try again."
         raise ValueError(f"Unsupported provider: '{self.provider}'. {suggestion}\nSupported providers are: {', '.join(self.SUPPORTED_PROVIDERS)}")
-
-    @property
-    def history_list(self):
-        return list(self.history)
 
     @property
     def model(self):
@@ -202,7 +221,7 @@ class Intelisys:
         except Exception as e:
             raise Exception(f"1Password Connect Error: {e}")
         
-    def _get_api_key(self) -> str:
+    def _get_api_key(self):
         env_var_map = {
             "openai": "OPENAI_API_KEY",
             "anthropic": "ANTHROPIC_API_KEY",
@@ -223,78 +242,6 @@ class Intelisys:
             return os.getenv(env_var) or self._go_get_api(item, key)
         else:
             raise ValueError(f"Unsupported provider: {self.provider}")
-
-    @staticmethod
-    def remove_preface(text: str) -> str:
-        """Remove any prefaced text before the start of JSON content."""
-        match = re.search(r"[\{\[]", text)
-        if match:
-            start = match.start()
-            return text[start:]
-        return text
-
-    @staticmethod
-    def locate_json_error(json_str: str, error_msg: str) -> tuple[int, int, str]:
-        """Locate the position of the JSON error and return the surrounding context."""
-        match = re.search(r"line (\d+) column (\d+)", error_msg)
-        if not match:
-            return 0, 0, "Could not parse error message"
-        line_no, col_no = map(int, match.groups())
-        lines = json_str.splitlines()
-        if line_no > len(lines):
-            return line_no, col_no, "Line number exceeds total lines in JSON string"
-        problematic_line = lines[line_no - 1]
-        start, end = max(0, col_no - 20), min(len(problematic_line), col_no + 20)
-        context = problematic_line[start:end]
-        pointer = f"{' ' * min(20, col_no - 1)}^"
-        return line_no, col_no, f"{context}\n{pointer}"
-
-    def safe_json_loads(self, json_str: str, error_prefix: str = "") -> Dict[str, Any]:
-        """Safely load JSON string, with iterative LLM-based error correction."""
-        json_str = self.remove_preface(json_str)
-        try:
-            return json.loads(json_str)
-        except json.JSONDecodeError as e:
-            line_no, col_no, context = self.locate_json_error(json_str, str(e))
-            self.logger.error(f"{error_prefix}Initial JSON parsing failed at line {line_no}, column {col_no}:\n{context}")
-            
-            fix_attempts = [
-                self.iterative_llm_fix_json,
-                lambda s: self.chat(f"Fix this JSON:\n{s}"),
-                ast.literal_eval
-            ]
-            
-            for fix in fix_attempts:
-                try:
-                    fixed_json = fix(json_str)
-                    return json.loads(fixed_json) if isinstance(fixed_json, str) else fixed_json
-                except (json.JSONDecodeError, ValueError, SyntaxError):
-                    continue
-            
-            self.logger.error(f"{error_prefix}JSON parsing failed after all correction attempts.")
-            self.logger.error(f"Problematic JSON string: {json_str}")
-            raise ValueError(f"{error_prefix}Failed to parse JSON after multiple attempts.")
-
-    def iterative_llm_fix_json(self, json_str: str, max_attempts: int = 5) -> str:
-        """Iteratively use an LLM to fix JSON formatting issues."""
-        prompts = [
-            "The following is a JSON string that has formatting issues. Please fix any errors and return only the corrected JSON:",
-            "The previous attempt to fix the JSON failed. Please try again, focusing on common JSON syntax errors like missing commas, unmatched brackets, or incorrect quotation marks:",
-            "The JSON is still invalid. Please break down the JSON structure, fix each part separately, and then reassemble it into a valid JSON string:",
-            "The JSON remains invalid. Please simplify the structure if possible, removing any nested objects or arrays that might be causing issues:",
-            "As a last resort, please rewrite the entire JSON structure from scratch based on the information contained within it, ensuring it's valid JSON:",
-        ]
-
-        for prompt in prompts[:max_attempts]:
-            try:
-                fixed_json = self.chat(f"{prompt}\n\n{json_str}")
-                json.loads(fixed_json)  # Validate the JSON
-                return fixed_json
-            except json.JSONDecodeError as e:
-                line_no, col_no, context = self.locate_json_error(fixed_json, str(e))
-                self.logger.error(f"Fix attempt failed. Error at line {line_no}, column {col_no}:\n{context}")
-
-        raise ValueError("Failed to fix JSON after multiple attempts")
 
     def _initialize_client(self):
         self.logger.info(f"Initializing client for provider: {self.provider}")
@@ -319,91 +266,25 @@ class Intelisys:
         self.logger.info(f"System message set: {self.system_message[:50]}...")  # Log first 50 chars
         return self
 
-    def chat(self, user_input: str) -> str:
+    def chat(self, user_input):
         self.logger.info(f"Chat method called")
         self.logger.debug(f"User input: {user_input[:50]}...")  # Log first 50 chars
-        
-        try:
-            if self.history and isinstance(self.history[-1]["content"], list):
-                # If the last message is a list (containing image data), append the text
-                self.history[-1]["content"].append({"type": "text", "text": user_input})
-            else:
-                # Otherwise, add a new user message
-                self.add_message("user", user_input)
-            
-            response = self._get_response()
-            
-            self.last_response = response
-            
-            # Only add the assistant message if it's not already the last message
-            if not self.history or self.history[-1]["role"] != "assistant":
-                self.add_message("assistant", str(response))
-            
-            self.trim_history()
-            
-            return response
-        except Exception as e:
-            self._handle_error(e, "chat")
-            raise
-
-
-    async def async_chat(self, user_input: str) -> Any:
-        self.logger.info(f"Async chat method called")
-        self.logger.debug(f"User input: {user_input[:50]}...")  # Log first 50 chars
-        
-        try:
-            self.add_message("user", user_input)
-            
-            if self.use_cache:
-                cache_key = self._generate_cache_key(user_input)
-                response = await self._async_cached_response(cache_key)
-            else:
-                response = await self._async_get_response()
-            
-            self.last_response = response
-            
-            self.add_message("assistant", str(response))
-            self.trim_history()
-            
-            return response
-        except Exception as e:
-            self._handle_error(e, "async_chat")
-            raise
-
-    async def async_chat(self, user_input: str) -> Any:
-        self.logger.info(f"Async chat method called")
-        self.logger.debug(f"User input: {user_input[:50]}...")  # Log first 50 chars
-        
-        try:
-            self.add_message("user", user_input)
-            
-            if self.use_cache:
-                cache_key = self._generate_cache_key(user_input)
-                response = await self._async_cached_response(cache_key)
-            else:
-                response = await self._async_get_response()
-            
-            self.last_response = response
-            
-            # Only add the assistant message if it's not already the last message
-            if not self.history or self.history[-1]["role"] != "assistant":
-                self.add_message("assistant", str(response))
-            
-            self.trim_history()
-            
-            return response
-        except Exception as e:
-            self._handle_error(e, "async_chat")
-            raise
+        if self.current_message or self.image_urls:
+            self.send()  # Send any pending message before starting a new one
+        self.current_message = {"type": "text", "text": user_input}
+        return self
 
     def _encode_image(self, image_path: str) -> str:
         self.logger.debug(f"Encoding image: {image_path}")
-        with open(image_path, "rb") as image_file:
-            return base64.b64encode(image_file.read()).decode('utf-8')
+        with Image.open(image_path) as img:
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+            byte_arr = io.BytesIO()
+            img.save(byte_arr, format='PNG')
+            return base64.b64encode(byte_arr.getvalue()).decode('utf-8')
 
-    def image(self, path_or_url: str, detail: str = "auto") -> 'Intelisys':
+    def image(self, path_or_url: str, detail: str = "auto"):
         self.logger.info(f"Image method called with path_or_url: {path_or_url}")
-        
         if self.provider not in ["openai", "openrouter"]:
             raise ValueError("The image method is only supported for the OpenAI and OpenRouter providers.")
         
@@ -425,64 +306,26 @@ class Intelisys:
                 }
             }
         
-        if not self.history or self.history[-1]["role"] != "user":
-            self.add_message("user", [])
-        
-        self.history[-1]["content"].append(image_data)
-        self.logger.debug(f"Added image: {path_or_url}")
-        
-        return self
-
-    async def async_image(self, path_or_url: str, detail: str = "auto") -> 'Intelisys':
-        """Add an image to be processed with the next async chat request."""
-        self.logger.info(f"Async image method called with path_or_url: {path_or_url}")
-        
-        if self.provider not in ["openai", "openrouter"]:
-            raise ValueError("The image method is only supported for the OpenAI and OpenRouter providers.")
-        
-        if os.path.isfile(path_or_url):
-            encoded_image = await self._async_encode_image(path_or_url)
-            image_data = {
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/png;base64,{encoded_image}",
-                    "detail": detail
-                }
-            }
-        else:
-            image_data = {
-                "type": "image_url",
-                "image_url": {
-                    "url": path_or_url,
-                    "detail": detail
-                }
-            }
-        
-        self.pending_images.append(image_data)
+        self.image_urls.append(image_data)
         self.logger.debug(f"Added image: {path_or_url}")
         return self
-
-    async def _async_encode_image(self, image_path: str) -> str:
-        import asyncio
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self._encode_image, image_path)
 
     def send(self):
-        self.logger.info("Send method called")
-        if self.current_message:
-            self.add_message("user", self.current_message["text"])
-        
-        self.current_message = None
-        self.image_urls = []
-        
-        if self.history:
-            response = self.get_response()
-            self.last_response = response
-        else:
-            self.logger.warning("No message to send")
-            self.last_response = None
-        
-        return self
+            self.logger.info("Send method called")
+            if self.current_message:
+                self.add_message("user", self.current_message["text"])
+            
+            self.current_message = None
+            self.image_urls = []
+            
+            if self.history:
+                response = self.get_response()
+                self.last_response = response
+            else:
+                self.logger.warning("No message to send")
+                self.last_response = None
+            
+            return self
 
     def clear(self):
         self.logger.info("Clear method called")
@@ -491,25 +334,20 @@ class Intelisys:
         self.logger.debug("Cleared current message and image URLs without sending")
         return self
 
-    def add_message(self, role: str, content: Union[str, List[Dict[str, Any]]]) -> 'Intelisys':
+    def add_message(self, role, content):
         self.logger.info(f"Adding message with role: {role}")
-        
-        if isinstance(content, str):
-            content = [{"type": "text", "text": content}]
-        
-        if self.history and self.history[-1]["role"] == role:
-            self.logger.debug(f"Merging consecutive {role} messages.")
-            if isinstance(self.history[-1]["content"], list):
-                self.history[-1]["content"].extend(content)
-            else:
-                self.history[-1]["content"] += f"\n{content[0]['text']}"
-        else:
-            self.history.append({"role": role, "content": content})
-        
+        self.logger.debug(f"Message content: {content[:50]}...")  # Log first 50 chars
+        if role == "user" and self.max_words_per_message:
+            if isinstance(content, str):
+                content += f" please use {self.max_words_per_message} words or less"
+            elif isinstance(content, list) and content and isinstance(content[0], dict) and content[0].get('type') == 'text':
+                content[0]['text'] += f" please use {self.max_words_per_message} words or less"
+
+        self.history.append({"role": role, "content": content})
         return self
 
-    def _get_response(self):
-        self.logger.info("_get_response method called")
+    def get_response(self):
+        self.logger.info("get_response method called")
         max_tokens = self.max_tokens if self.max_tokens is not None else (4000 if self.provider != "anthropic" else 8192)
 
         for attempt in range(self.max_retry):
@@ -521,12 +359,16 @@ class Intelisys:
 
                 if self.json_mode:
                     if self.provider == "openai":
-                        # For OpenAI, we assume the response is already in JSON format
-                        assistant_response = json.loads(assistant_response)
+                        try:
+                            assistant_response = json.loads(assistant_response)
+                        except json.JSONDecodeError as json_error:
+                            self.logger.error(f"JSON decoding error: {json_error}")
+                            raise
                     else:
-                        # For other providers, we wrap the response in a JSON object
-                        assistant_response = {"response": assistant_response}
+                        assistant_response = safe_json_loads(assistant_response, error_prefix="Intelisys JSON parsing: ")
 
+                self.add_message("assistant", str(assistant_response))
+                self.trim_history()
                 return assistant_response
             except Exception as e:
                 self.logger.error(f"Error on attempt {attempt + 1}/{self.max_retry}: {e}")
@@ -536,90 +378,13 @@ class Intelisys:
                 else:
                     raise Exception(f"Max retries reached. Last error: {e}")
 
-    async def _async_get_response(self):
-        self.logger.info("_async_get_response method called")
-        max_tokens = self.max_tokens if self.max_tokens is not None else (4000 if self.provider != "anthropic" else 8192)
-
-        for attempt in range(self.max_retry):
-            try:
-                self.logger.debug(f"Attempt {attempt + 1} to get async response")
-                response = await self._async_create_response(max_tokens)
-                
-                assistant_response = await self._async_handle_stream(response) if self.stream else await self._async_handle_non_stream(response)
-
-                if self.json_mode:
-                    if self.provider == "openai":
-                        try:
-                            assistant_response = json.loads(assistant_response)
-                        except json.JSONDecodeError as json_error:
-                            self.logger.error(f"JSON decoding error: {json_error}")
-                            raise
-                    else:
-                        assistant_response = await async_safe_json_loads(assistant_response, self._async_llm_fix_json, error_prefix="Intelisys JSON parsing: ")
-
-                return assistant_response
-            except Exception as e:
-                self.logger.error(f"Error on attempt {attempt + 1}/{self.max_retry}: {e}")
-                if attempt < self.max_retry - 1:
-                    await asyncio.sleep(1)
-                else:
-                    raise Exception(f"Max retries reached. Last error: {e}")
-
     def _create_response(self, max_tokens, **kwargs):
         self.logger.debug(f"Creating response with max_tokens={max_tokens}")
-        history_list = list(self.history)  # Convert deque to list
         if self.provider == "anthropic":
-            messages = [
-                {
-                    "role": msg["role"],
-                    "content": msg["content"] if isinstance(msg["content"], list) else [{"type": "text", "text": msg["content"]}]
-                }
-                for msg in history_list
-            ]
             return self.client.messages.create(
                 model=self.model,
                 system=self.system_message,
-                messages=messages,
-                stream=self.stream,
-                temperature=self.temperature,
-                max_tokens=max_tokens,
-                extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
-                **kwargs
-            )
-        elif self.provider == "openai":
-            common_params = {
-                "model": self.model,
-                "messages": [{"role": "system", "content": self.system_message}] + history_list,
-                "stream": self.stream,
-                "temperature": self.temperature,
-                "max_tokens": max_tokens,
-                **kwargs
-            }
-            if self.json_mode:
-                common_params["response_format"] = {"type": "json_object"}
-            
-            self.logger.debug(f"API call params: {common_params}")
-            return self.client.chat.completions.create(**common_params)
-        else:
-            # For other providers, use a generic format
-            return self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "system", "content": self.system_message}] + history_list,
-                stream=self.stream,
-                temperature=self.temperature,
-                max_tokens=max_tokens,
-                **kwargs
-            )
-
-    async def _async_create_response(self, max_tokens, **kwargs):
-        self.logger.debug(f"Creating async response with max_tokens={max_tokens}")
-        if self.provider == "anthropic":
-            # Ensure the history starts with a user message
-            messages = self.history if self.history[0]["role"] == "user" else self.history[1:]
-            return await self.client.messages.create(
-                model=self.model,
-                system=self.system_message,
-                messages=messages,
+                messages=self.history,
                 stream=self.stream,
                 temperature=self.temperature,
                 max_tokens=max_tokens,
@@ -629,7 +394,7 @@ class Intelisys:
         else:
             common_params = {
                 "model": self.model,
-                "messages": [{"role": "system", "content": self.system_message}] + list(self.history),
+                "messages": [{"role": "system", "content": self.system_message}] + self.history,
                 "stream": self.stream,
                 "temperature": self.temperature,
                 "max_tokens": max_tokens,
@@ -638,8 +403,8 @@ class Intelisys:
             if self.json_mode and self.provider == "openai":
                 common_params["response_format"] = {"type": "json_object"}
             
-            self.logger.debug(f"Async API call params: {common_params}")
-            return await self.client.chat.completions.create(**common_params)
+            self.logger.debug(f"API call params: {common_params}")
+            return self.client.chat.completions.create(**common_params)
 
     def _handle_stream(self, response, color, should_print):
         self.logger.debug("Handling stream response")
@@ -653,26 +418,8 @@ class Intelisys:
         print()
         return assistant_response
 
-    async def _async_handle_stream(self, response):
-        self.logger.debug("Handling async stream response")
-        assistant_response = ""
-        async for chunk in response:
-            content = self._extract_content(chunk)
-            if content:
-                print(colored(content, self.print_color), end="", flush=True)
-                assistant_response += content
-        print()
-        return assistant_response
-
     def _handle_non_stream(self, response):
         self.logger.debug("Handling non-stream response")
-        if self.provider == "anthropic":
-            return response.content[0].text
-        else:
-            return response.choices[0].message.content
-
-    async def _async_handle_non_stream(self, response):
-        self.logger.debug("Handling async non-stream response")
         return response.content[0].text if self.provider == "anthropic" else response.choices[0].message.content
 
     def _extract_content(self, chunk):
@@ -682,10 +429,11 @@ class Intelisys:
 
     def trim_history(self):
         self.logger.info("Trimming history")
-        words_count = sum(len(content.split()) for role, content in self.history if role != "system")
+        words_count = sum(len(str(m["content"]).split()) for m in self.history if m["role"] != "system")
         while words_count > self.max_history_words and len(self.history) > 1:
             removed_message = self.history.pop(0)
-            words_count -= len(removed_message["content"].split())
+            words_count -= len(str(removed_message["content"]).split())
+            self.logger.debug(f"Removed message from history: {removed_message['role']}")
         self.logger.debug(f"History trimmed. Current word count: {words_count}")
         return self
 
@@ -730,7 +478,8 @@ class Intelisys:
     def template_chat(self, 
                     render_data: Optional[Dict[str, Union[str, int, float]]] = None, 
                     template: Optional[str] = None, 
-                    persona: Optional[str] = None) -> Union[str, Dict]:
+                    persona: Optional[str] = None, 
+                    return_self: bool = True) -> Union['Intelisys', Dict]:
         self.logger.info("Template chat method called")
         try:
             template = Template(template or self.default_template)
@@ -742,9 +491,15 @@ class Intelisys:
             raise ValueError(f"Invalid template: {e}")
 
         self.set_system_message(persona or self.default_persona)
-        response = self.chat(prompt)
+        response = self.chat(prompt).send().results()  # Call results() here
 
-        return response
+        self.last_response = response
+        self.logger.info(f"template_chat response: {self.last_response}")
+
+        if return_self:
+            return self
+        else:
+            return self.last_response
 
     @contextmanager
     def template_context(self, template: Optional[str] = None, persona: Optional[str] = None):
@@ -760,125 +515,127 @@ class Intelisys:
             self.default_template, self.default_persona = old_template, old_persona
             self.logger.info("Exiting template context")
 
-    def _generate_cache_key(self, user_input: str) -> str:
-        # Generate a unique cache key based on user input and current state
-        state = f"{self.provider}:{self.model}:{self.temperature}:{self.max_tokens}"
-        key = f"{state}:{user_input}"
-        return hashlib.md5(key.encode()).hexdigest()
-
-    @lru_cache(maxsize=100)
-    def _cached_response(self, cache_key: str) -> str:
-        # This method will be automatically cached
-        return self._get_response()
-
-    async def _async_cached_response(self, cache_key: str) -> str:
-        # We can't use lru_cache directly with async functions, so we'll implement a simple cache
-        if not hasattr(self, '_async_cache'):
-            self._async_cache = {}
-        
-        if cache_key not in self._async_cache:
-            self._async_cache[cache_key] = await self._async_get_response()
-        
-        return self._async_cache[cache_key]
-
-    def clear_cache(self) -> None:
-        self._cached_response.cache_clear()
-        if hasattr(self, '_async_cache'):
-            self._async_cache.clear()
-
-    def set_use_cache(self, use_cache: bool) -> 'Intelisys':
-        self.use_cache = use_cache
+    # Async methods
+    async def chat_async(self, user_input, **kwargs):
+        self.logger.info("Async chat method called")
+        await self.add_message_async("user", user_input)
+        self.last_response = await self.get_response_async(**kwargs)
         return self
 
-    def _split_batch_response(self, response: str, num_questions: int) -> List[str]:
-        if isinstance(response, dict) and 'response' in response:
-            response = response['response']
-        
-        # Split the response by "Answer X:" or "Question X:" patterns
-        splits = re.split(r'(?:Answer|Question)\s*\d+:\s*', response)
-        
-        # Remove any empty splits and strip whitespace
-        answers = [split.strip() for split in splits if split.strip()]
-        
-        # Ensure we have the correct number of answers
-        if len(answers) < num_questions:
-            answers.extend([''] * (num_questions - len(answers)))
-        elif len(answers) > num_questions:
-            answers = answers[:num_questions]
-        
-        return answers
-
-    def batch_process(self, inputs: List[str], max_workers: int = 5) -> List[Any]:
-        self.logger.info(f"Batch processing {len(inputs)} inputs")
-        
-        # Create a single message with all inputs
-        combined_input = "Please answer the following questions:\n" + "\n".join([f"Question {i+1}: {input_str}" for i, input_str in enumerate(inputs, 1)])
-        self.add_message("user", combined_input)
-        
-        response = self._get_response()
-        self.add_message("assistant", str(response))
-        
-        # Split the response into individual answers
-        answers = self._split_batch_response(response, len(inputs))
-        
-        return answers
-
-    async def async_batch_process(self, inputs: List[str]) -> List[Any]:
-        self.logger.info(f"Async batch processing {len(inputs)} inputs")
-        combined_input = "\n".join([f"Question {i+1}: {input_str}" for i, input_str in enumerate(inputs)])
-        self.add_message("user", combined_input)
-        
-        response = await self._async_get_response()
-        self.add_message("assistant", str(response))
-        
-        answers = self._split_batch_response(response, len(inputs))
-        
-        return answers
-
-    def parallel_template_chat(self, render_data_list: List[Dict], template: str, persona: str, max_workers: int = 5) -> List[Any]:
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [executor.submit(self.template_chat, render_data, template, persona) for render_data in render_data_list]
-            results = []
-            for future in as_completed(futures):
-                try:
-                    result = future.result()
-                    results.append(result)
-                except Exception as e:
-                    self.logger.error(f"Error in parallel template chat: {e}")
-                    results.append(None)
-        return results
-
-    async def async_parallel_template_chat(self, render_data_list: List[Dict], template: str, persona: str) -> List[Any]:
-        tasks = [self.template_chat(render_data, template, persona) for render_data in render_data_list]
-        return await asyncio.gather(*tasks)
-
-    def set_error_callback(self, callback: Callable[[Exception], None]) -> 'Intelisys':
-        self.error_callback = callback
+    async def add_message_async(self, role, content):
+        self.logger.info(f"Async adding message with role: {role}")
+        self.add_message(role, content)
         return self
 
-    def _handle_error(self, e: Exception, context: str) -> None:
-        error_message = f"Error in {context}: {str(e)}\n{traceback.format_exc()}"
-        self.logger.error(error_message)
-        if self.error_callback:
-            self.error_callback(e)
+    async def set_system_message_async(self, message=None):
+        self.logger.info("Async setting system message")
+        self.set_system_message(message)
+        return self
 
-    async def _async_llm_fix_json(self, prompt: str) -> str:
-        """Use the LLM to fix JSON formatting issues."""
+    async def get_response_async(self, color=None, should_print=True, **kwargs):
+        self.logger.info("Async get_response method called")
+        color = color or self.print_color
+        max_tokens = kwargs.pop('max_tokens', 4000 if self.provider != "anthropic" else 8192)
+
+        response = await self._create_response_async(max_tokens, **kwargs)
+
+        assistant_response = await self._handle_stream_async(response, color, should_print) if self.stream else await self._handle_non_stream_async(response)
+
+        if self.json_mode and self.provider == "openai":
+            try:
+                assistant_response = json.loads(assistant_response)
+            except json.JSONDecodeError as json_error:
+                self.logger.error(f"JSON decoding error: {json_error}")
+                raise
+
+        await self.add_message_async("assistant", str(assistant_response))
+        await self.trim_history_async()
+        return assistant_response
+
+    async def _create_response_async(self, max_tokens, **kwargs):
+        self.logger.debug(f"Creating async response with max_tokens={max_tokens}")
+        if self.provider == "anthropic":
+            return await self.client.messages.create(
+                model=self.model,
+                system=self.system_message,
+                messages=self.history,
+                stream=self.stream,
+                temperature=self.temperature,
+                max_tokens=max_tokens,
+                extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
+                **kwargs
+            )
+        else:
+            common_params = {
+                "model": self.model,
+                "messages": [{"role": "system", "content": self.system_message}] + self.history,
+                "stream": self.stream,
+                "temperature": self.temperature,
+                "max_tokens": max_tokens,
+                **kwargs
+            }
+            if self.json_mode and self.provider == "openai":
+                common_params["response_format"] = {"type": "json_object"}
+            
+            return await self.client.chat.completions.create(**common_params)
+
+    async def _handle_stream_async(self, response, color, should_print):
+        self.logger.debug("Handling async stream response")
+        assistant_response = ""
+        async for chunk in response:
+            content = self._extract_content_async(chunk)
+            if content:
+                if should_print:
+                    print(colored(content, color), end="", flush=True)
+                assistant_response += content
+        print()
+        return assistant_response
+
+    async def _handle_non_stream_async(self, response):
+        self.logger.debug("Handling async non-stream response")
+        return response.content[0].text if self.provider == "anthropic" else response.choices[0].message.content
+
+    def _extract_content_async(self, chunk):
+        if self.provider == "anthropic":
+            return chunk.delta.text if chunk.type == 'content_block_delta' else None
+        return chunk.choices[0].delta.content if chunk.choices[0].delta.content else None
+
+    async def trim_history_async(self):
+        self.logger.info("Async trimming history")
+        self.trim_history()
+        return self
+
+    async def template_chat_async(self, 
+                                render_data: Optional[Dict[str, Union[str, int, float]]] = None, 
+                                template: Optional[str] = None, 
+                                persona: Optional[str] = None, 
+                                parse_json: bool = False) -> 'Intelisys':
+        self.logger.info("Async template chat method called")
         try:
-            response = await self._async_get_response()
-            return response
+            template = Template(template or self.default_template)
+            merged_data = {**self.template_data, **(render_data or {})}
+            prompt = template.render(**merged_data)
+            self.logger.debug(f"Rendered prompt: {prompt[:50]}...")  # Log first 50 chars
         except Exception as e:
-            self.logger.error(f"Error in _async_llm_fix_json: {e}")
-            raise
+            self.logger.error(f"Error rendering template: {e}")
+            raise ValueError(f"Invalid template: {e}")
 
-    def __enter__(self):
+        await self.set_system_message_async(persona or self.default_persona)
+        response = await self.chat_async(prompt)
+        response = self.results()
+
+        if self.json_mode:
+            if isinstance(response, dict):
+                self.last_response = response
+            elif isinstance(response, str):
+                try:
+                    self.last_response = json.loads(response)
+                except json.JSONDecodeError:
+                    self.last_response = safe_json_loads(response, error_prefix="Intelisys async template chat JSON parsing: ")
+            else:
+                self.logger.error(f"Unexpected response type: {type(response)}")
+                raise ValueError(f"Unexpected response type: {type(response)}")
+        else:
+            self.last_response = response
+        
         return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.clear_cache()
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc_value, traceback):
-        self.clear_cache()
