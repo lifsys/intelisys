@@ -152,7 +152,7 @@ class Intelisys:
         intelisys = Intelisys(provider="openai", model="gpt-4")
         response = intelisys.chat("Hello, how are you?").get_response()
     """
-    LOG_FORMAT = "%(asctime)s %(levelname)s - %(name)s: %(message)s"
+    LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
     @classmethod
     def _configure_logger(cls, name: str, level: Union[int, str] = "WARNING"):
@@ -271,7 +271,7 @@ class Intelisys:
             level = getattr(logging, level)
         
         self.logger.setLevel(level)
-        self.logger.info(f"Log level set to: {logging.getLevelName(level)}")
+        self.logger.info("Log level set to: %s", logging.getLevelName(level))
 
     def _raise_unsupported_provider_error(self):
         import difflib
