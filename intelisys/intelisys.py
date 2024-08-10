@@ -30,8 +30,8 @@ from termcolor import colored
 import logging
 
 # Set up the root logger
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    datefmt='%Y-%m-%d %H:%M:%S')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger("Global")
 
 def remove_preface(text: str) -> str:
     """Remove any prefaced text before the start of JSON content."""
@@ -57,29 +57,28 @@ def locate_json_error(json_str: str, error_msg: str) -> Tuple[int, int, str]:
     return line_no, col_no, f"{context}\n{pointer}"
 
 def iterative_llm_fix_json(json_string: str, max_attempts: int = 5, intelisys_instance=None) -> str:
-    print(f"Starting iterative_llm_fix_json with input: {json_string}")
+    logger.info(f"Starting iterative_llm_fix_json with input: {json_string}")
     if intelisys_instance is None:
         intelisys_instance = Intelisys(provider="openai", model="gpt-3.5-turbo", api_key="dummy_key")
     attempts = 0
     
     while attempts < max_attempts:
-        # Always attempt to "fix" the JSON, even if it's already valid
         prompt = f"Fix this JSON: {json_string}"
-        print(f"Sending prompt to AI: {prompt}")
-        response = intelisys_instance.chat(prompt).get_response()
-        print(f"Received response from AI: {response}")
+        logger.debug(f"Sending prompt to AI: {prompt}")
+        response = intelisys_instance.chat(prompt)
+        logger.debug(f"Received response from AI: {response}")
         
         try:
             json.loads(response)  # Try to parse the AI's response
-            print(f"Successfully parsed JSON on attempt {attempts + 1}")
+            logger.info(f"Successfully parsed JSON on attempt {attempts + 1}")
             return response  # If successful, return the AI's response
         except json.JSONDecodeError:
-            print(f"JSON parsing failed on attempt {attempts + 1}")
+            logger.warning(f"JSON parsing failed on attempt {attempts + 1}")
             json_string = response  # Update json_string with the AI's response for the next attempt
         
         attempts += 1
     
-    print(f"Reached max attempts. Returning: {json_string}")
+    logger.warning(f"Reached max attempts. Returning: {json_string}")
     return json_string  # Return the last attempt even if it's not valid JSON
 
 def safe_json_loads(json_str: str, error_prefix: str = "") -> Dict:
@@ -99,8 +98,7 @@ def safe_json_loads(json_str: str, error_prefix: str = "") -> Dict:
             model="gpt-4o-mini",
             json_mode=True) \
             .set_system_message("Convert the following text into valid JSON. If it's already valid JSON, return it as is.") \
-            .chat(f"Convert this to JSON:\n{s}") \
-            .get_response(),
+            .chat(f"Convert this to JSON:\n{s}"),
         iterative_llm_fix_json,
         lambda s: ast.literal_eval(s) if s.strip().startswith('{') else {"content": s}
     ]
@@ -114,11 +112,11 @@ def safe_json_loads(json_str: str, error_prefix: str = "") -> Dict:
                 # If it's still a string, try to parse it as JSON one more time
                 return json.loads(fixed_json)
         except Exception as e:
-            logging.debug(f"{error_prefix}JSON conversion attempt failed: {str(e)}")
+            logger.debug(f"{error_prefix}JSON conversion attempt failed: {str(e)}")
             continue
     
     # If all attempts fail, create a simple JSON object with the original string as content
-    logging.warning(f"{error_prefix}Failed to convert to JSON. Creating a simple JSON object.")
+    logger.warning(f"{error_prefix}Failed to convert to JSON. Creating a simple JSON object.")
     return {"content": json_str}
 
 class Intelisys:
@@ -156,7 +154,7 @@ class Intelisys:
 
     SUPPORTED_PROVIDERS = {"openai", "anthropic", "openrouter", "groq"}
     DEFAULT_MODELS = {
-        "openai": "gpt-4o",
+        "openai": "gpt-4o-2024-08-06",
         "anthropic": "claude-3-5-sonnet-20240620",
         "openrouter": "meta-llama/llama-3.1-405b-instruct",
         "groq": "llama-3.1-8b-instant"
