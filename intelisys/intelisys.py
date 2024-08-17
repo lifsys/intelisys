@@ -6,12 +6,11 @@ The OP_CONNECT_TOKEN and OP_CONNECT_HOST environment variables must be set
 for the onepasswordconnectsdk to function properly.
 
 Example usage for image OCR:
-    intelisys = Intelisys(provider="openrouter", model="google/gemini-pro-vision")
-    #intelisys = Intelisys(provider="openai", model="gpt-4o-mini")
+    intelisys = Intelisys(provider="openrouter", model="google/gemini-pro-vision")  # Make sure to use a model that supports image processing
     result = (intelisys
-    .chat("Historical analysis of language use in the following image(s). Please step through each area of the image and extract all text.")
-    .image("/Users/lifsys/Documents/devhub/testingZone/_Archive/screen_small-2.png")
-    .get_response()    )
+        .image("https://mintlify.s3-us-west-1.amazonaws.com/anthropic/images/how-to-prompt-eng.png")
+        .chat("Please provide the complete text in the following image(s).")
+    )
     result
 """
 import re
@@ -29,10 +28,16 @@ from openai import AsyncOpenAI, OpenAI
 from termcolor import colored
 import logging
 
-# Set up the root logger
-LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-logging.basicConfig(level=logging.WARNING, format=LOG_FORMAT)
-logger = logging.getLogger(__name__)
+# Define the log format
+DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
+LOG_FORMAT = "%(asctime)s | %(levelname)s | %(message)s"
+
+# Configure the root logger
+logging.basicConfig(level=logging.WARNING, datefmt=DATETIME_FORMAT, format=LOG_FORMAT, force=True)
+
+# Create a logger for this module
+logger = logging.getLogger("Global")
+logger.setLevel(logging.INFO)
 
 def remove_preface(text: str) -> str:
     """Remove any prefaced text before the start of JSON content."""
@@ -152,24 +157,10 @@ class Intelisys:
         intelisys = Intelisys(provider="openai", model="gpt-4")
         response = intelisys.chat("Hello, how are you?").get_response()
     """
-    LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-
-    @classmethod
-    def _configure_logger(cls, name: str, level: Union[int, str] = logging.WARNING):
-        logger = logging.getLogger(name)
-        logger.setLevel(level)
-        
-        # Remove any existing handlers to avoid duplication
-        for handler in logger.handlers[:]:
-            logger.removeHandler(handler)
-        
-        # Add a new handler with the correct format
-        handler = logging.StreamHandler()
-        handler.setFormatter(logging.Formatter(cls.LOG_FORMAT))
-        logger.addHandler(handler)
-        
-        return logger
-    
+    # Define the log format
+    DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
+    LOG_FORMAT = "%(asctime)s | %(levelname)s | %(message)s"
+ 
     SUPPORTED_PROVIDERS = {"openai", "anthropic", "openrouter", "groq"}
     DEFAULT_MODELS = {
         "openai": "gpt-4o-2024-08-06",
@@ -178,7 +169,7 @@ class Intelisys:
         "groq": "llama-3.1-8b-instant"
     }
 
-    def __init__(self, name="Intelisys", api_key=None, max_history_words=10000,
+    def __init__(self, name="Intelisys", api_key=None, max_history_words=0,
                  max_words_per_message=None, json_mode=False, stream=False, use_async=False,
                  max_retry=10, provider="anthropic", model=None, should_print_init=False,
                  print_color="green", temperature=0, max_tokens=None, log: Union[str, int] = "WARNING"):
@@ -204,10 +195,10 @@ class Intelisys:
         """
         
         # Set up logger
-        logging.basicConfig(format=self.LOG_FORMAT)
-        self.logger = self._configure_logger(__name__, log)
+        self.logger = logging.getLogger(f"{self.__class__.__name__}.{name}")
+        self.set_log_level(log)
         
-        self.logger.info(f"Initializing Intelisys instance '{name}' with provider={provider}, model={model}")
+        self.logger.debug(f"Initializing Intelisys instance '{name}' with provider={provider}, model={model}")
         
         self.provider = provider.lower()
         if self.provider not in self.SUPPORTED_PROVIDERS:
@@ -221,7 +212,7 @@ class Intelisys:
         self.max_words_per_message = max_words_per_message
         self.json_mode = json_mode
         if self.json_mode and self.provider != "openai":
-            self.logger.warning(f"json_mode=True is set for provider '{self.provider}'")
+            self.logger.debug(f"json_mode=True is set for provider '{self.provider}'")
         self.stream = stream
         self.use_async = use_async
         self.max_retry = max_retry
@@ -251,18 +242,7 @@ class Intelisys:
                           f"stream={stream}, use_async={use_async}, max_retry={max_retry}, "
                           f"temperature={temperature}, max_tokens={max_tokens}")
 
-    def set_log_level(self, level: Union[int, str] = "WARNING"):
-        """
-        Set the log level for this Intelisys instance.
-
-        Args:
-            level (int or str): The log level to set. Can be a string (e.g., "DEBUG", "INFO")
-                                or an integer constant from the logging module.
-                                Defaults to "WARNING".
-
-        Raises:
-            ValueError: If an invalid log level string is provided.
-        """
+    def set_log_level(self, level: Union[int, str]):
         if isinstance(level, str):
             level = level.upper()
             if not hasattr(logging, level):
@@ -270,7 +250,21 @@ class Intelisys:
             level = getattr(logging, level)
         
         self.logger.setLevel(level)
-        self.logger.info("Log level set to: %s", logging.getLevelName(level))
+        
+        # Remove all existing handlers
+        for handler in self.logger.handlers[:]:
+            self.logger.removeHandler(handler)
+        
+        # Add a single handler with the correct formatter
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter(self.LOG_FORMAT, datefmt=self.DATETIME_FORMAT)
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
+        
+        # Prevent the logger from propagating messages to the root logger
+        self.logger.propagate = False
+        
+        self.logger.debug("Log level set to: %s", logging.getLevelName(level))
 
     def _raise_unsupported_provider_error(self):
         import difflib
@@ -328,7 +322,7 @@ class Intelisys:
             raise ValueError(f"Unsupported provider: {self.provider}")
 
     def _initialize_client(self):
-        self.logger.info(f"Initializing client for provider: {self.provider}")
+        self.logger.debug(f"Initializing client for provider: {self.provider}")
         if self.use_async:
             if self.provider == "anthropic":
                 self._client = AsyncAnthropic(api_key=self.api_key)
@@ -359,7 +353,7 @@ class Intelisys:
         self.system_message = message or "You are a helpful assistant."
         if self.provider == "openai" and self.json_mode and "json" not in message.lower():
             self.system_message += " Please return your response in JSON unless user has specified a system message."
-        self.logger.info(f"System message set: {self.system_message[:50]}...")  # Log first 50 chars
+        self.logger.debug(f"System message set: {self.system_message[:50]}...")  # Log first 50 chars
         return self
 
     def chat(self, user_input):
@@ -375,12 +369,11 @@ class Intelisys:
         Usage:
             response = intelisys.chat("What is the capital of France?").get_response()
         """
-        logger = logging.getLogger("chat")
-        logger.info("Method called")
-        logger.debug(f"User input: {user_input[:50]}...")
-        if self.current_message:
-            self.get_response()  # Send any pending message before starting a new one
-        self.current_message = {"type": "text", "text": user_input}
+        self.logger.debug("*Chat*")
+        self.logger.debug(f"User input: {user_input[:50]}...")
+        self.current_message = {"role": "user", "content": user_input}
+        if self.max_history_words > 0:
+            self.add_message("user", user_input)
         return self.get_response()
 
     def _encode_image(self, image_path: str) -> str:
@@ -410,7 +403,7 @@ class Intelisys:
         Usage:
             intelisys.chat("Describe this image").image("/path/to/image.jpg").get_response()
         """
-        self.logger.info(f"Image method called with path_or_url: {path_or_url}")
+        self.logger.debug(f"Image method called with path_or_url: {path_or_url}")
         if self.provider not in ["openai", "openrouter"]:
             raise ValueError("The image method is only supported for the OpenAI and OpenRouter providers.")
         
@@ -439,64 +432,72 @@ class Intelisys:
         Usage:
             response = intelisys.chat("Hello").get_response()
         """
-        logger = logging.getLogger("get_response")
-        logger.info("Method called")
+        self.logger.debug("*Get Response*")
+        
         if self.current_message:
-            self.add_message("user", self.current_message["text"])
-        
-        self.current_message = None
-        
-        if self.history:
             response = self._create_response(self.max_tokens or (4000 if self.provider != "anthropic" else 8192))
             self.last_response = self._handle_response(response)
         else:
             self.logger.warning("No message to send")
             self.last_response = None
         
+        self.current_message = None
         self.image_urls = []  # Clear image URLs after sending
         return self.last_response
 
     def _create_response(self, max_tokens, **kwargs):
+        if self.max_history_words > 0:
+            messages = self.history.copy()
+        else:
+            # Use the current_message directly, as it's already properly formatted
+            messages = [self.current_message]
+        
         common_params = {
             "model": self.model,
-            "messages": self.history.copy(),
+            "messages": messages,
             "stream": self.stream,
             "temperature": self.temperature,
         }
 
-        if max_tokens:
-            common_params["max_tokens"] = max_tokens
-
-        if self.image_urls and self.provider in ["openai", "openrouter"]:
-            last_message = common_params["messages"][-1]
-            content = []
-
-            if isinstance(last_message["content"], str):
-                content.append({"type": "text", "text": last_message["content"]})
-
-            for image_url in self.image_urls:
-                content.append({
-                    "type": "image_url",
-                    "image_url": {"url": image_url}
-                })
-
-            last_message["content"] = content
-
-        self.logger.debug(f"API call params: {common_params}")
-
-        if self.json_mode and self.provider == "openai":
-            common_params["response_format"] = {"type": "json_object"}
-        
-        self.logger.debug(f"API call params: {common_params}")
-
         if self.provider == "anthropic":
+            # For Anthropic, adjust max_tokens and add the beta header
+            anthropic_max_tokens = min(max_tokens, 4096)  # Ensure it doesn't exceed 4096
+            extra_headers = {"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"}
+            
             return self.client.messages.create(
                 system=self.system_message,
-                extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
+                max_tokens=anthropic_max_tokens,
+                extra_headers=extra_headers,
                 **common_params,
                 **kwargs
             )
         else:
+            # For other providers
+            if max_tokens:
+                common_params["max_tokens"] = max_tokens
+
+            if self.image_urls and self.provider in ["openai", "openrouter"]:
+                last_message = common_params["messages"][-1]
+                content = []
+
+                if isinstance(last_message["content"], str):
+                    content.append({"type": "text", "text": last_message["content"]})
+
+                for image_url in self.image_urls:
+                    content.append({
+                        "type": "image_url",
+                        "image_url": {"url": image_url}
+                    })
+
+                last_message["content"] = content
+
+            if self.json_mode and self.provider == "openai":
+                common_params["response_format"] = {"type": "json_object"}
+            
+            if self.system_message:
+                common_params["messages"].insert(0, {"role": "system", "content": self.system_message})
+
+            self.logger.debug(f"API call params: {common_params}")
             return self.client.chat.completions.create(**common_params, **kwargs)
 
     def _handle_response(self, response):
@@ -556,17 +557,20 @@ class Intelisys:
         return chunk.choices[0].delta.content if chunk.choices[0].delta.content else None
 
     def trim_history(self):
-        self.logger.info("Trimming history")
-        words_count = sum(len(str(m["content"]).split()) for m in self.history if m["role"] != "system")
-        while words_count > self.max_history_words and len(self.history) > 1:
-            removed_message = self.history.pop(0)
-            words_count -= len(str(removed_message["content"]).split())
-            self.logger.debug(f"Removed message from history: {removed_message['role']}")
-        self.logger.debug(f"History trimmed. Current word count: {words_count}")
+        if self.max_history_words > 0:
+            self.logger.info("Trimming history")
+            words_count = sum(len(str(m["content"]).split()) for m in self.history if m["role"] != "system")
+            while words_count > self.max_history_words and len(self.history) > 1:
+                removed_message = self.history.pop(0)
+                words_count -= len(str(removed_message["content"]).split())
+            self.logger.debug(f"History trimmed. Current word count: {words_count}")
+        else:
+            self.history.clear()
+            self.logger.debug("History cleared (max_history_words is 0)")
         return self
 
     def add_message(self, role, content):
-        self.logger.info(f"Adding message with role: {role}")
+        self.logger.debug(f"Adding message with role: {role}")
         self.logger.debug(f"Message content: {content[:50]}...")  # Log first 50 chars
         if role == "user" and self.max_words_per_message:
             if isinstance(content, str):
@@ -574,31 +578,33 @@ class Intelisys:
             elif isinstance(content, list) and content and isinstance(content[0], dict) and content[0].get('type') == 'text':
                 content[0]['text'] += f" please use {self.max_words_per_message} words or less"
 
-        self.history.append({"role": role, "content": content})
+        if self.max_history_words > 0:
+            self.history.append({"role": role, "content": content})
+            self.trim_history()
         return self
 
     def set_default_template(self, template: str) -> 'Intelisys':
-        self.logger.info("Setting default template")
+        self.logger.debug("*Set Default template*")
         self.default_template = template
         return self
 
     def set_default_persona(self, persona: str) -> 'Intelisys':
-        self.logger.info("Setting default persona")
+        self.logger.debug("*Setting default persona*")
         self.default_persona = persona
         return self
 
     def set_template_instruction(self, set: str, instruction: str):
-        self.logger.info(f"Setting template instruction: set={set}, instruction={instruction}")
+        self.logger.debug(f"Setting template instruction: set={set}, instruction={instruction}")
         self.template_instruction = self._go_get_api(set, instruction, "Promptsys")
         return self
 
     def set_template_persona(self, persona: str):
-        self.logger.info(f"Setting template persona: {persona}")
+        self.logger.debug(f"Setting template persona: {persona}")
         self.template_persona = self._go_get_api("persona", persona, "Promptsys")
         return self
 
     def set_template_data(self, render_data: Dict):
-        self.logger.info("Setting template data")
+        self.logger.debug("Setting template data")
         self.template_data = render_data
         return self
 
@@ -627,7 +633,7 @@ class Intelisys:
                 persona="You are a weather expert."
             )
         """
-        self.logger.info("Template chat method called")
+        self.logger.info("*Template*")
         try:
             template = Template(template or self.default_template)
             merged_data = {**self.template_data, **(render_data or {})}
@@ -641,13 +647,51 @@ class Intelisys:
         response = self.chat(prompt)
 
         self.last_response = response
-        self.logger.info(f"template_chat response: {self.last_response}")
+        self.logger.debug(f"template_chat response: {self.last_response}")
 
         return self.last_response
 
+    def transcript(self, audio_file_path: str, model: str = "whisper-1") -> str:
+        """
+        Transcribe an audio file using OpenAI's Whisper model.
+
+        Args:
+            audio_file_path (str): Path to the audio file to transcribe.
+            model (str, optional): The model to use for transcription. Defaults to "whisper-1".
+
+        Returns:
+            str: The transcribed text.
+
+        Raises:
+            ValueError: If the provider is not OpenAI or if the audio file is not found.
+
+        Usage:
+            transcription = intelisys.transcript("/path/to/audio.mp3")
+        """
+        self.logger.debug(f"Transcribing audio file: {audio_file_path}")
+
+        if self.provider != "openai":
+            raise ValueError("The transcript method is only supported for the OpenAI provider.")
+
+        if not os.path.exists(audio_file_path):
+            raise FileNotFoundError(f"Audio file not found: {audio_file_path}")
+
+        try:
+            with open(audio_file_path, "rb") as audio_file:
+                transcript = self.client.audio.transcriptions.create(
+                    model=model,
+                    file=audio_file
+                )
+            
+            self.logger.debug("Transcription completed successfully")
+            return transcript.text
+        except Exception as e:
+            self.logger.error(f"Error during transcription: {str(e)}")
+            raise
+
     @contextmanager
     def template_context(self, template: Optional[str] = None, persona: Optional[str] = None):
-        self.logger.info("Entering template context")
+        self.logger.debug("*Template context*")
         old_template, old_persona = self.default_template, self.default_persona
         if template:
             self.set_default_template(template)
@@ -657,27 +701,27 @@ class Intelisys:
             yield
         finally:
             self.default_template, self.default_persona = old_template, old_persona
-            self.logger.info("Exiting template context")
+            self.logger.debug("Exiting template context")
 
     # Async methods
     async def chat_async(self, user_input, **kwargs):
-        self.logger.info("Async chat method called")
+        self.logger.debug("Async chat method called")
         await self.add_message_async("user", user_input)
         self.last_response = await self.get_response_async(**kwargs)
         return self.last_response
 
     async def add_message_async(self, role, content):
-        self.logger.info(f"Async adding message with role: {role}")
+        self.logger.debug(f"Async adding message with role: {role}")
         self.add_message(role, content)
         return self
 
     async def set_system_message_async(self, message=None):
-        self.logger.info("Async setting system message")
+        self.logger.debug("Async setting system message")
         self.set_system_message(message)
         return self
 
     async def get_response_async(self, color=None, should_print=True, **kwargs):
-        self.logger.info("Async get_response method called")
+        self.logger.debug("Async get_response method called")
         color = color or self.print_color
         max_tokens = kwargs.pop('max_tokens', 4000 if self.provider != "anthropic" else 8192)
 
@@ -745,7 +789,7 @@ class Intelisys:
         return chunk.choices[0].delta.content if chunk.choices[0].delta.content else None
 
     async def trim_history_async(self):
-        self.logger.info("Async trimming history")
+        self.logger.debug("Async trimming history")
         self.trim_history()
         return self
 
@@ -776,7 +820,7 @@ class Intelisys:
             )
             result = intelisys.last_response
         """
-        self.logger.info("Async template chat method called")
+        self.logger.debug("Async template chat method called")
         try:
             template = Template(template or self.default_template)
             merged_data = {**self.template_data, **(render_data or {})}
