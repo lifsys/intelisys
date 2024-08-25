@@ -29,7 +29,6 @@ from openai import AsyncOpenAI, OpenAI
 from termcolor import colored
 import logging
 from pydantic import BaseModel, ValidationError
-from functools import lru_cache
 
 # Define the log format
 DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
@@ -240,7 +239,10 @@ class Intelisys:
         if should_print_init:
             print(colored(f"\n{self.name} initialized with provider={self.provider}, model={self.model}, json_mode={self.json_mode}, temp={self.temperature}", "red"))
 
-        self.logger.debug(f"Intelisys initialized with: {', '.join(f'{k}={v}' for k, v in locals().items() if k != 'self')}")
+        self.logger.debug(f"Intelisys initialized with: name={name}, max_history_words={max_history_words}, "
+                          f"max_words_per_message={max_words_per_message}, json_mode={json_mode}, "
+                          f"stream={stream}, use_async={use_async}, max_retry={max_retry}, "
+                          f"temperature={temperature}, max_tokens={max_tokens}")
 
         self.output_model = None
         self.structured_output = None
@@ -290,7 +292,6 @@ class Intelisys:
         return self._client
 
     @staticmethod
-    @lru_cache(maxsize=128)
     def _go_get_api(item: str, key_name: str, vault: str = "API") -> str:
         try:
             from onepasswordconnectsdk import new_client_from_environment
@@ -439,70 +440,74 @@ class Intelisys:
         return self
 
     def _create_response(self, max_tokens, **kwargs):
-        messages = self.history.copy() if self.max_history_words > 0 else [self.current_message]
+        if self.max_history_words > 0:
+            messages = self.history.copy()
+        else:
+            # Use the current_message directly, as it's already properly formatted
+            messages = [self.current_message]
         
         common_params = {
             "model": self.model,
             "messages": messages,
             "stream": self.stream,
             "temperature": self.temperature,
-            **kwargs
         }
 
         if self.provider == "anthropic":
-            return self._create_anthropic_response(common_params, max_tokens)
+            # For Anthropic, adjust max_tokens and add the beta header
+            anthropic_max_tokens = min(max_tokens, 4096)  # Ensure it doesn't exceed 4096
+            extra_headers = {"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"}
+            
+            return self.client.messages.create(
+                system=self.system_message,
+                max_tokens=anthropic_max_tokens,
+                extra_headers=extra_headers,
+                **common_params,
+                **kwargs
+            )
         else:
-            return self._create_other_provider_response(common_params, max_tokens)
+            # For other providers
+            if max_tokens:
+                common_params["max_tokens"] = max_tokens
 
-    def _create_anthropic_response(self, common_params, max_tokens):
-        anthropic_max_tokens = min(max_tokens, 4096)
-        extra_headers = {"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"}
-        
-        return self.client.messages.create(
-            system=self.system_message,
-            max_tokens=anthropic_max_tokens,
-            extra_headers=extra_headers,
-            **common_params
-        )
+            if self.image_urls and self.provider in ["openai", "openrouter"]:
+                last_message = common_params["messages"][-1]
+                content = []
 
-    def _create_other_provider_response(self, common_params, max_tokens):
-        if max_tokens:
-            common_params["max_tokens"] = max_tokens
+                if isinstance(last_message["content"], str):
+                    content.append({"type": "text", "text": last_message["content"]})
 
-        if self.image_urls and self.provider in ["openai", "openrouter"]:
-            self._add_image_content(common_params)
+                for image_url in self.image_urls:
+                    content.append({
+                        "type": "image_url",
+                        "image_url": {"url": image_url}
+                    })
 
-        if self.json_mode and self.provider == "openai":
-            common_params["response_format"] = {"type": "json_object"}
-        
-        if self.system_message:
-            common_params["messages"].insert(0, {"role": "system", "content": self.system_message})
+                last_message["content"] = content
 
-        if self.provider == "openai" and self.output_model:
-            self._add_output_model_params(common_params)
+            if self.json_mode and self.provider == "openai":
+                common_params["response_format"] = {"type": "json_object"}
+            
+            if self.system_message:
+                common_params["messages"].insert(0, {"role": "system", "content": self.system_message})
 
-        self.logger.debug(f"API call params: {common_params}")
-        return self.client.chat.completions.create(**common_params)
+            if self.provider == "openai" and self.output_model:
+                common_params["response_format"] = {"type": "json_object"}
+                common_params["functions"] = [{
+                    "name": "output",
+                    "parameters": self.output_model.model_json_schema()
+                }]
+                common_params["function_call"] = {"name": "output"}
+                
+                # Add JSON instruction to the system message
+                json_instruction = "Please return your response in JSON format according to the specified schema."
+                if common_params["messages"][0]["role"] == "system":
+                    common_params["messages"][0]["content"] += f" {json_instruction}"
+                else:
+                    common_params["messages"].insert(0, {"role": "system", "content": json_instruction})
 
-    def _add_image_content(self, common_params):
-        last_message = common_params["messages"][-1]
-        content = [{"type": "text", "text": last_message["content"]}] if isinstance(last_message["content"], str) else []
-        content.extend({"type": "image_url", "image_url": {"url": url}} for url in self.image_urls)
-        last_message["content"] = content
-
-    def _add_output_model_params(self, common_params):
-        common_params["response_format"] = {"type": "json_object"}
-        common_params["functions"] = [{
-            "name": "output",
-            "parameters": self.output_model.model_json_schema()
-        }]
-        common_params["function_call"] = {"name": "output"}
-        
-        json_instruction = "Please return your response in JSON format according to the specified schema."
-        if common_params["messages"][0]["role"] == "system":
-            common_params["messages"][0]["content"] += f" {json_instruction}"
-        else:
-            common_params["messages"].insert(0, {"role": "system", "content": json_instruction})
+            self.logger.debug(f"API call params: {common_params}")
+            return self.client.chat.completions.create(**common_params, **kwargs)
 
     def _handle_response(self, response):
         logger = logging.getLogger("handle_response")

@@ -19,8 +19,7 @@ import json
 import os
 import base64
 import io
-import requests
-from typing import Dict, Optional, Union, Tuple, Any, Type
+from typing import Dict, Optional, Union, Tuple
 from contextlib import contextmanager
 from PIL import Image
 from anthropic import Anthropic, AsyncAnthropic
@@ -28,8 +27,6 @@ from jinja2 import Template
 from openai import AsyncOpenAI, OpenAI
 from termcolor import colored
 import logging
-from pydantic import BaseModel, ValidationError
-from functools import lru_cache
 
 # Define the log format
 DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
@@ -158,7 +155,7 @@ class Intelisys:
 
     Usage:
         intelisys = Intelisys(provider="openai", model="gpt-4")
-        response = intelisys.chat("Hello, how are you?")
+        response = intelisys.chat("Hello, how are you?").get_response()
     """
     # Define the log format
     DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
@@ -240,10 +237,10 @@ class Intelisys:
         if should_print_init:
             print(colored(f"\n{self.name} initialized with provider={self.provider}, model={self.model}, json_mode={self.json_mode}, temp={self.temperature}", "red"))
 
-        self.logger.debug(f"Intelisys initialized with: {', '.join(f'{k}={v}' for k, v in locals().items() if k != 'self')}")
-
-        self.output_model = None
-        self.structured_output = None
+        self.logger.debug(f"Intelisys initialized with: name={name}, max_history_words={max_history_words}, "
+                          f"max_words_per_message={max_words_per_message}, json_mode={json_mode}, "
+                          f"stream={stream}, use_async={use_async}, max_retry={max_retry}, "
+                          f"temperature={temperature}, max_tokens={max_tokens}")
 
     def set_log_level(self, level: Union[int, str]):
         if isinstance(level, str):
@@ -290,7 +287,6 @@ class Intelisys:
         return self._client
 
     @staticmethod
-    @lru_cache(maxsize=128)
     def _go_get_api(item: str, key_name: str, vault: str = "API") -> str:
         try:
             from onepasswordconnectsdk import new_client_from_environment
@@ -362,35 +358,23 @@ class Intelisys:
 
     def chat(self, user_input):
         """
-        Send a chat message to the AI and return the response.
+        Send a chat message to the AI and prepare for a response.
 
         Args:
             user_input (str): The user's message to send to the AI.
 
         Returns:
-            Union[str, BaseModel]: The AI's response as a string or a Pydantic model instance if structured output is used.
+            self: The Intelisys instance for method chaining.
 
         Usage:
-            response = intelisys.chat("What is the capital of France?")
+            response = intelisys.chat("What is the capital of France?").get_response()
         """
         self.logger.debug("*Chat*")
         self.logger.debug(f"User input: {user_input[:50]}...")
         self.current_message = {"role": "user", "content": user_input}
         if self.max_history_words > 0:
             self.add_message("user", user_input)
-        
-        try:
-            response = self._create_response(self.max_tokens or (4000 if self.provider != "anthropic" else 8192))
-            self.logger.debug(f"Raw API response: {response}")
-            result = self._handle_response(response)
-        except Exception as e:
-            self.logger.error(f"Error in chat method: {str(e)}")
-            raise
-        
-        self.current_message = None
-        self.image_urls = []  # Clear image URLs after sending
-        
-        return result
+        return self.get_response()
 
     def _encode_image(self, image_path: str) -> str:
         self.logger.debug(f"Encoding image: {image_path}")
@@ -424,85 +408,97 @@ class Intelisys:
             raise ValueError("The image method is only supported for the OpenAI and OpenRouter providers.")
         
         if path_or_url.startswith(('http://', 'https://')):
-            response = requests.get(path_or_url)
-            response.raise_for_status()
-            image_data = base64.b64encode(response.content).decode('utf-8')
+            image_data = path_or_url
         else:
             # Validate local file path
             if not os.path.exists(path_or_url):
                 raise FileNotFoundError(f"Image file not found: {path_or_url}")
-            with open(path_or_url, "rb") as image_file:
-                image_data = base64.b64encode(image_file.read()).decode('utf-8')
+            image_data = path_or_url
 
-        self.image_urls.append(f"data:image/jpeg;base64,{image_data}")
+        self.image_urls.append(image_data)
         self.logger.debug(f"Added image: {path_or_url}")
         return self
 
+    def get_response(self):
+        """
+        Get the AI's response for the current message.
+
+        Returns:
+            str or dict: The AI's response, which may be a string or a JSON object if json_mode is True.
+
+        Raises:
+            ValueError: If there's no message to send or if the response is None.
+
+        Usage:
+            response = intelisys.chat("Hello").get_response()
+        """
+        self.logger.debug("*Get Response*")
+        
+        if self.current_message:
+            response = self._create_response(self.max_tokens or (4000 if self.provider != "anthropic" else 8192))
+            self.last_response = self._handle_response(response)
+        else:
+            self.logger.warning("No message to send")
+            self.last_response = None
+        
+        self.current_message = None
+        self.image_urls = []  # Clear image URLs after sending
+        return self.last_response
+
     def _create_response(self, max_tokens, **kwargs):
-        messages = self.history.copy() if self.max_history_words > 0 else [self.current_message]
+        if self.max_history_words > 0:
+            messages = self.history.copy()
+        else:
+            # Use the current_message directly, as it's already properly formatted
+            messages = [self.current_message]
         
         common_params = {
             "model": self.model,
             "messages": messages,
             "stream": self.stream,
             "temperature": self.temperature,
-            **kwargs
         }
 
         if self.provider == "anthropic":
-            return self._create_anthropic_response(common_params, max_tokens)
+            # For Anthropic, adjust max_tokens and add the beta header
+            anthropic_max_tokens = min(max_tokens, 4096)  # Ensure it doesn't exceed 4096
+            extra_headers = {"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"}
+            
+            return self.client.messages.create(
+                system=self.system_message,
+                max_tokens=anthropic_max_tokens,
+                extra_headers=extra_headers,
+                **common_params,
+                **kwargs
+            )
         else:
-            return self._create_other_provider_response(common_params, max_tokens)
+            # For other providers
+            if max_tokens:
+                common_params["max_tokens"] = max_tokens
 
-    def _create_anthropic_response(self, common_params, max_tokens):
-        anthropic_max_tokens = min(max_tokens, 4096)
-        extra_headers = {"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"}
-        
-        return self.client.messages.create(
-            system=self.system_message,
-            max_tokens=anthropic_max_tokens,
-            extra_headers=extra_headers,
-            **common_params
-        )
+            if self.image_urls and self.provider in ["openai", "openrouter"]:
+                last_message = common_params["messages"][-1]
+                content = []
 
-    def _create_other_provider_response(self, common_params, max_tokens):
-        if max_tokens:
-            common_params["max_tokens"] = max_tokens
+                if isinstance(last_message["content"], str):
+                    content.append({"type": "text", "text": last_message["content"]})
 
-        if self.image_urls and self.provider in ["openai", "openrouter"]:
-            self._add_image_content(common_params)
+                for image_url in self.image_urls:
+                    content.append({
+                        "type": "image_url",
+                        "image_url": {"url": image_url}
+                    })
 
-        if self.json_mode and self.provider == "openai":
-            common_params["response_format"] = {"type": "json_object"}
-        
-        if self.system_message:
-            common_params["messages"].insert(0, {"role": "system", "content": self.system_message})
+                last_message["content"] = content
 
-        if self.provider == "openai" and self.output_model:
-            self._add_output_model_params(common_params)
+            if self.json_mode and self.provider == "openai":
+                common_params["response_format"] = {"type": "json_object"}
+            
+            if self.system_message:
+                common_params["messages"].insert(0, {"role": "system", "content": self.system_message})
 
-        self.logger.debug(f"API call params: {common_params}")
-        return self.client.chat.completions.create(**common_params)
-
-    def _add_image_content(self, common_params):
-        last_message = common_params["messages"][-1]
-        content = [{"type": "text", "text": last_message["content"]}] if isinstance(last_message["content"], str) else []
-        content.extend({"type": "image_url", "image_url": {"url": url}} for url in self.image_urls)
-        last_message["content"] = content
-
-    def _add_output_model_params(self, common_params):
-        common_params["response_format"] = {"type": "json_object"}
-        common_params["functions"] = [{
-            "name": "output",
-            "parameters": self.output_model.model_json_schema()
-        }]
-        common_params["function_call"] = {"name": "output"}
-        
-        json_instruction = "Please return your response in JSON format according to the specified schema."
-        if common_params["messages"][0]["role"] == "system":
-            common_params["messages"][0]["content"] += f" {json_instruction}"
-        else:
-            common_params["messages"].insert(0, {"role": "system", "content": json_instruction})
+            self.logger.debug(f"API call params: {common_params}")
+            return self.client.chat.completions.create(**common_params, **kwargs)
 
     def _handle_response(self, response):
         logger = logging.getLogger("handle_response")
@@ -534,17 +530,6 @@ class Intelisys:
                     self.logger.error(f"safe_json_loads error: {json_error}")
                     raise
 
-        if self.provider == "openai" and self.output_model:
-            function_call = response.choices[0].message.function_call
-            if function_call and function_call.name == "output":
-                try:
-                    self.structured_output = self.output_model.model_validate_json(function_call.arguments)
-                except ValidationError:
-                    self.logger.warning("Failed to validate structured output")
-                    self.structured_output = None
-            else:
-                self.structured_output = None
-
         self.logger.debug(f"Final processed assistant response: {assistant_response}")
         self.add_message("assistant", str(assistant_response))
         self.trim_history()
@@ -564,16 +549,7 @@ class Intelisys:
 
     def _handle_non_stream(self, response):
         self.logger.debug("Handling non-stream response")
-        if self.provider == "anthropic":
-            return response.content[0].text
-        elif self.provider == "openai":
-            message = response.choices[0].message
-            if message.function_call:
-                return message.function_call.arguments
-            else:
-                return message.content
-        else:
-            return response.choices[0].message.content
+        return response.content[0].text if self.provider == "anthropic" else response.choices[0].message.content
 
     def _extract_content(self, chunk):
         if self.provider == "anthropic":
@@ -635,7 +611,7 @@ class Intelisys:
     def template_chat(self, 
                     render_data: Optional[Dict[str, Union[str, int, float]]] = None, 
                     template: Optional[str] = None, 
-                    persona: Optional[str] = None) -> Union[str, BaseModel]:
+                    persona: Optional[str] = None) -> Union[str, Dict]:
         """
         Send a chat message using a template and get the AI's response.
 
@@ -645,7 +621,7 @@ class Intelisys:
             persona (str, optional): The persona to use for the system message. If None, uses the default persona.
 
         Returns:
-            Union[str, BaseModel]: The AI's response as a string or a Pydantic model instance if structured output is used.
+            str or dict: The AI's response, which may be a string or a JSON object if json_mode is True.
 
         Raises:
             ValueError: If there's an error rendering the template.
@@ -668,7 +644,12 @@ class Intelisys:
             raise ValueError(f"Invalid template: {e}")
 
         self.set_system_message(persona or self.default_persona)
-        return self.chat(prompt)
+        response = self.chat(prompt)
+
+        self.last_response = response
+        self.logger.debug(f"template_chat response: {self.last_response}")
+
+        return self.last_response
 
     def transcript(self, audio_file_path: str, model: str = "whisper-1") -> str:
         """
@@ -784,14 +765,6 @@ class Intelisys:
             if self.json_mode and self.provider == "openai":
                 common_params["response_format"] = {"type": "json_object"}
             
-            if self.provider == "openai" and self.output_model:
-                common_params["response_format"] = {"type": "json_object"}
-                common_params["functions"] = [{
-                    "name": "output",
-                    "parameters": self.output_model.model_json_schema()
-                }]
-                common_params["function_call"] = {"name": "output"}
-
             return await self.client.chat.completions.create(**common_params)
 
     async def _handle_stream_async(self, response, color, should_print):
@@ -819,35 +792,6 @@ class Intelisys:
         self.logger.debug("Async trimming history")
         self.trim_history()
         return self
-
-    def set_output_model(self, model: Type[BaseModel]):
-        """
-        Set the Pydantic model for structured output (OpenAI provider only).
-
-        Args:
-            model (Type[BaseModel]): The Pydantic model defining the structure of the output.
-
-        Returns:
-            self: The Intelisys instance for method chaining.
-        """
-        if self.provider != "openai":
-            self.logger.warning("Structured output is only supported for the OpenAI provider. This setting will be ignored.")
-        else:
-            self.output_model = model
-        return self
-
-    def results(self) -> Union[str, BaseModel, None]:
-        """
-        Get the results of the last chat operation.
-
-        Returns:
-            Union[str, BaseModel, None]: The chat response as a string, 
-            a Pydantic model instance (if structured output is used with OpenAI), 
-            or None if not available.
-        """
-        if self.provider == "openai" and self.structured_output:
-            return self.structured_output
-        return self.last_response
 
     async def template_chat_async(self, 
                                 render_data: Optional[Dict[str, Union[str, int, float]]] = None, 
