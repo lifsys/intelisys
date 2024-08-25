@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "intelisys"
-version = "0.5.2"
-description = "Intelligence/AI services for the Lifsys Enterprise with improved max_history_words and trimming"
+version = "0.5.4"
+description = "Intelligence/AI services for the Lifsys Enterprise with enhanced max_history_words and efficient history trimming"
 readme = "README.md"
 authors = [{name = "Lifsys Enterprise", email = "contact@lifsys.com"}]
 license = {file = "LICENSE"}
