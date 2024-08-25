@@ -1,11 +1,11 @@
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setup(
     name="intelisys",
-    version="0.5.2",
+    version="0.5.3",
     author="Lifsys Enterprise",
     author_email="contact@lifsys.com",
     description="Intelligence/AI services for the Lifsys Enterprise with improved max_history_words and trimming",
