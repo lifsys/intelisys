@@ -5,10 +5,10 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="intelisys",
-    version="0.5.4",
+    version="0.5.5",  # Incremented version number
     author="Lifsys Enterprise",
     author_email="contact@lifsys.com",
-    description="Intelligence/AI services for the Lifsys Enterprise with enhanced max_history_words and efficient history trimming",
+    description="Intelligence/AI services for the Lifsys Enterprise with enhanced max_history_words, efficient history trimming, and improved async support",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/lifsys/intelisys",
@@ -33,6 +33,7 @@ setup(
         "anthropic>=0.3.0",
         "pillow>=8.0.0",
         "termcolor>=1.1.0",
+        "aiohttp>=3.7.4",  # Added for improved async support
     ],
     extras_require={
         "dev": [

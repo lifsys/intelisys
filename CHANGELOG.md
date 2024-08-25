@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.5] - 2024-08-25
+### Added
+- Improved asynchronous support with better error handling
+- Support for structured output with OpenAI provider using Pydantic models
+- New examples in README.md for advanced usage scenarios
+
+### Changed
+- Enhanced performance for long-running conversations
+- Updated documentation to reflect new features and improvements
+- Optimized async operations for better efficiency
+
+### Fixed
+- Minor bug fixes in error handling for API requests
+
 ## [0.5.4] - 2024-08-24
 ### Added
 - Enhanced max_history_words functionality for better conversation management

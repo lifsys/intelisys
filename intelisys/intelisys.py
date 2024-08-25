@@ -30,6 +30,8 @@ from termcolor import colored
 import logging
 from pydantic import BaseModel, ValidationError
 from functools import lru_cache
+import PyPDF2
+from bs4 import BeautifulSoup
 
 # Define the log format
 DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
@@ -707,6 +709,76 @@ class Intelisys:
         except Exception as e:
             self.logger.error(f"Error during transcription: {str(e)}")
             raise
+
+    def reference(self, source: str) -> 'Intelisys':
+        """
+        Add content from a URL, file, or PDF to the system message.
+
+        Args:
+            source (str): URL or file path to the reference content.
+
+        Returns:
+            self: The Intelisys instance for method chaining.
+
+        Raises:
+            ValueError: If the source is invalid or content cannot be retrieved.
+        """
+        self.logger.debug(f"Adding reference from: {source}")
+
+        try:
+            if source.startswith(('http://', 'https://')):
+                content = self._fetch_url_content(source)
+            elif source.lower().endswith('.pdf'):
+                content = self._read_pdf_content(source)
+            else:
+                content = self._read_file_content(source)
+
+            # Truncate content if it's too long
+            max_words = 10000  # Adjust this value as needed
+            words = content.split()
+            if len(words) > max_words:
+                content = ' '.join(words[:max_words]) + "... (truncated)"
+
+            # Append the new content to the existing system message
+            self.system_message += f"\n\nReference information:\n{content}"
+            self.logger.debug(f"Updated system message with reference. New word count: {len(content.split())}")
+
+        except Exception as e:
+            self.logger.error(f"Error adding reference: {str(e)}")
+            raise ValueError(f"Failed to add reference from {source}: {str(e)}")
+
+        return self
+
+    def _fetch_url_content(self, url: str) -> str:
+        """Fetch content from a URL."""
+        response = requests.get(url)
+        response.raise_for_status()
+        if url.lower().endswith('.pdf'):
+            return self._read_pdf_content(io.BytesIO(response.content))
+        soup = BeautifulSoup(response.content, 'html.parser')
+        # Extract text content, ignoring scripts and styles
+        return ' '.join(soup.stripped_strings)
+
+    def _read_file_content(self, filepath: str) -> str:
+        """Read content from a file."""
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"File not found: {filepath}")
+        with open(filepath, 'r', encoding='utf-8') as file:
+            return file.read()
+
+    def _read_pdf_content(self, source: Union[str, io.BytesIO]) -> str:
+        """Read content from a PDF file."""
+        try:
+            if isinstance(source, str):
+                with open(source, 'rb') as file:
+                    reader = PyPDF2.PdfReader(file)
+                    return ' '.join(page.extract_text() for page in reader.pages)
+            else:
+                reader = PyPDF2.PdfReader(source)
+                return ' '.join(page.extract_text() for page in reader.pages)
+        except Exception as e:
+            self.logger.error(f"Error reading PDF: {str(e)}")
+            raise ValueError(f"Failed to read PDF: {str(e)}")
 
     @contextmanager
     def template_context(self, template: Optional[str] = None, persona: Optional[str] = None):

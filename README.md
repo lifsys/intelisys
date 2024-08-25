@@ -1,145 +1,157 @@
-# Intelisys
+# Intelisys: Your Friendly AI Assistant Library
 
-Intelisys is a powerful and flexible Python library that provides a unified interface for interacting with various AI providers and models. It simplifies the process of chatting with AI models, handling image inputs, and managing conversation history across different platforms.
+Hello there, future AI master! 👋 Let's embark on an exciting journey to learn about Intelisys, a magical tool that helps you talk to different AI friends. Imagine having a universal remote control for all your AI toys – that's what Intelisys is!
 
-## Table of Contents
-- [Installation](#installation)
-- [Usage](#usage)
-- [API Reference](#api-reference)
-- [Contributing](#contributing)
-- [License](#license)
+## What is Intelisys?
 
-## Installation
+Intelisys is like a super-smart translator that helps you chat with different AI friends (we call them "providers") using just one language. It's like having a friend who speaks many languages and can help you talk to people from all over the world!
 
-To install Intelisys, you can use pip:
+## Getting Started
+
+### Step 1: Install Intelisys
+
+First, we need to invite Intelisys to our playground. Open your computer's command center (we call it a "terminal") and type:
 
 ```bash
 pip install intelisys
 ```
 
-## Usage
+### Step 2: Import Intelisys
 
-### Basic Usage
-
-Here's a simple example of how to use Intelisys:
+Now that we have Intelisys installed, let's bring it into our code playground. In your Python code, add the following line:
 
 ```python
 from intelisys import Intelisys
-
-# Initialize Intelisys
-ai = Intelisys(provider="openai", model="gpt-3.5-turbo")
-
-# Set a system message
-ai.set_system_message("You are a helpful assistant.")
-
-# Chat with the AI
-response = ai.chat("Hello, how are you?")
-
-# Get the AI's response
-print(ai.get_response())
 ```
 
-### Advanced Usage
+### Step 3: Create an Intelisys Instance
 
-Intelisys supports method chaining for a more fluent interface:
+Next, we need to create an instance of Intelisys. Think of this like creating a new friend object. We'll give it a name, and tell it which AI friend we want to talk to:
 
 ```python
-from intelisys import Intelisys
-
-ai = (Intelisys(provider="anthropic", model="claude-2")
-      .set_system_message("You are a creative writing assistant.")
-      .set_default_template("User: {}\nAI: ")
-      .set_default_persona("You are a witty and sarcastic AI."))
-
-response = ai.chat("Write a short story about a time-traveling toaster.")
-print(ai.get_response())
+ai = Intelisys(provider="openai", model="gpt-4")
 ```
 
-### Asynchronous Usage
+In this example, we're creating an Intelisys instance named `ai`, and we're telling it to talk to the "OpenAI" provider using the "gpt-4" model.
 
-Intelisys also supports asynchronous operations:
+### Step 4: Chat with Your AI Friend
+
+Now that we have our Intelisys instance, we can start chatting with our AI friend! Let's ask it a question:
+
+```python
+response = ai.chat("What is the capital of France?")
+print(response)
+```
+
+This will send the message "What is the capital of France?" to our AI friend, and print out its response.
+
+## Advanced Features
+
+### Template-Based Chat
+
+Imagine you want to ask your AI friend to explain something in simple terms. We can use a template to make it easier:
+
+```python
+ai = Intelisys(provider="anthropic", model="claude-3-5-sonnet-20240620")
+ai.set_default_template("Explain {{topic}} in simple terms.")
+response = ai.template_chat(render_data={"topic": "artificial intelligence"})
+print(response)
+```
+
+In this example, we're setting a default template for our messages, and then using the `template_chat` method to send a message with the topic "artificial intelligence" filled in.
+
+### Asynchronous Chat
+
+Sometimes, we might want to chat with our AI friend in the background while we do other things. We can use asynchronous chat for this:
 
 ```python
 import asyncio
-from intelisys import Intelisys
 
-async def main():
-    ai = Intelisys(provider="openai", model="gpt-4")
-    await ai.set_system_message_async("You are a helpful assistant.")
-    await ai.chat_async("What's the capital of France?")
-    response = await ai.get_response_async()
+async def async_chat():
+    ai = Intelisys(provider="openai", model="gpt-4", use_async=True)
+    response = await ai.chat_async("What are the implications of AGI?")
     print(response)
 
-asyncio.run(main())
+asyncio.run(async_chat())
 ```
+
+In this example, we're creating an asynchronous function `async_chat` that creates an Intelisys instance with asynchronous mode enabled. We then use the `chat_async` method to send a message and wait for the response.
+
+### Structured Output (OpenAI only)
+
+Imagine you want your AI friend to give you a structured response, like a movie review with a title, rating, and summary. We can use Pydantic models for this:
+
+```python
+from pydantic import BaseModel
+
+class MovieReview(BaseModel):
+    title: str
+    rating: float
+    summary: str
+
+ai = Intelisys(provider="openai", model="gpt-4")
+ai.set_output_model(MovieReview)
+result = ai.chat("Review the movie 'Inception'")
+print(result)  # This will be a MovieReview instance
+```
+
+In this example, we're defining a Pydantic model `MovieReview` with fields for the title, rating, and summary. We then set this model as the output model for our Intelisys instance, and ask it to review the movie "Inception". The response will be a `MovieReview` instance with the requested information.
+
+### Reference Information
+
+Imagine you want to give your AI friend some reference information to help it answer your question. We can use the `reference` method for this:
+
+```python
+ai = Intelisys(provider="openai", model="gpt-4")
+ai.reference("https://example.com/article.html")
+ai.reference("/path/to/local/document.pdf")
+response = ai.chat("Summarize the referenced information")
+print(response)
+```
+
+In this example, we're adding two references to our Intelisys instance: a URL and a local PDF file. We then ask it to summarize the referenced information, and print out the response.
 
 ## API Reference
 
-### Class: Intelisys
+### Intelisys Class
 
-#### `__init__(self, provider: str, model: str = None, **kwargs)`
+#### `__init__(self, name="Intelisys", provider="anthropic", model=None, ...)`
 Initializes an Intelisys instance.
 
-#### `set_log_level(self, level: Union[int, str])`
-Sets the log level for the Intelisys instance.
+#### `chat(self, user_input)`
+Sends a chat message and returns the AI's response.
+
+#### `image(self, path_or_url: str)`
+Adds an image to the current message for image-based AI tasks.
 
 #### `set_system_message(self, message=None)`
 Sets the system message for the conversation.
 
-#### `chat(self, user_input)`
-Sends a user message to the AI and gets a response.
-
-#### `get_response(self)`
-Retrieves the latest response from the AI.
-
-#### `trim_history(self)`
-Trims the conversation history to stay within token limits.
-
-#### `add_message(self, role, content)`
-Adds a message to the conversation history.
-
-#### `set_default_template(self, template: str) -> 'Intelisys'`
+#### `set_default_template(self, template: str)`
 Sets a default template for formatting messages.
 
-#### `set_default_persona(self, persona: str) -> 'Intelisys'`
-Sets a default persona for the AI.
+#### `template_chat(self, render_data=None, template=None, persona=None)`
+Sends a chat message using a template and returns the AI's response.
 
-#### `remove_preface(text: str) -> str`
-Removes preface from the given text.
+#### `reference(self, source: str)`
+Adds content from a URL, file, or PDF to the system message.
 
-#### `safe_json_loads(json_str: str, error_prefix: str = "") -> Dict`
-Safely loads a JSON string into a dictionary.
+#### `set_output_model(self, model: Type[BaseModel])`
+Sets the Pydantic model for structured output (OpenAI provider only).
 
-#### `chat_async(self, user_input, **kwargs)`
-Asynchronous version of chat method.
+#### `results(self)`
+Returns the results of the last chat operation.
 
-#### `add_message_async(self, role, content)`
-Asynchronous version of add_message method.
-
-#### `set_system_message_async(self, message=None)`
-Asynchronous version of set_system_message method.
-
-#### `get_response_async(self, color=None, should_print=True, **kwargs)`
-Asynchronous version of get_response method.
-
-#### `trim_history_async(self)`
-Asynchronous version of trim_history method.
-
-For detailed information on parameters and return values, please refer to the method docstrings in the source code.
+For asynchronous versions of these methods (where applicable), append `_async` to the method name.
 
 ## Contributing
 
-We welcome contributions to Intelisys! If you'd like to contribute, please follow these steps:
-
-1. Fork the repository
-2. Create a new branch for your feature or bug fix
-3. Make your changes and write tests if applicable
-4. Run the existing tests to ensure nothing was broken
-5. Commit your changes and push to your fork
-6. Create a pull request with a clear description of your changes
-
-Please ensure your code adheres to the existing style and passes all tests before submitting a pull request.
+We welcome contributions to Intelisys! Please see our [Contributing Guidelines](CONTRIBUTING.md) for more details.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Changelog
+
+For a detailed list of changes and version history, please refer to the [CHANGELOG.md](CHANGELOG.md) file.
