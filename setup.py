@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="intelisys",
-    version="0.5.5",  # Incremented version number
+    version="0.5.6",  # Incremented version number
     author="Lifsys Enterprise",
     author_email="contact@lifsys.com",
     description="Intelligence/AI services for the Lifsys Enterprise with enhanced max_history_words, efficient history trimming, and improved async support",
@@ -33,7 +33,13 @@ setup(
         "anthropic>=0.3.0",
         "pillow>=8.0.0",
         "termcolor>=1.1.0",
-        "aiohttp>=3.7.4",  # Added for improved async support
+        "aiohttp>=3.7.4",
+        "pydantic>=1.8.0",  # Added for structured output support
+        "PyPDF2>=1.26.0",  # Added for PDF processing
+        "python-pptx>=0.6.18",  # Added for PowerPoint processing
+        "openpyxl>=3.0.7",  # Added for Excel processing
+        "python-docx>=0.8.11",  # Added for Word document processing
+        "chardet>=4.0.0",  # Added for character encoding detection
     ],
     extras_require={
         "dev": [

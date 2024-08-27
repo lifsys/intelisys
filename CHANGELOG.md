@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.6] - 2024-08-27
+### Added
+- Enhanced support for various document types in reference method (PDF, Word, Excel, PowerPoint)
+- Improved error handling and logging for file processing
+- New dependencies for document processing (PyPDF2, python-pptx, openpyxl, python-docx, chardet)
+
+### Changed
+- Further optimized max_history_words functionality and history trimming
+- Updated README.md with more comprehensive examples and feature descriptions
+- Refactored code for better maintainability and performance
+
+### Fixed
+- Various minor bug fixes and improvements in error handling
+
 ## [0.5.5] - 2024-08-25
 ### Added
 - Improved asynchronous support with better error handling
@@ -18,29 +32,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Minor bug fixes in error handling for API requests
-
-## [0.5.4] - 2024-08-24
-### Added
-- Enhanced max_history_words functionality for better conversation management
-- Improved history trimming for efficient memory usage
-
-### Changed
-- Optimized performance for long-running conversations
-- Updated documentation to reflect new features and improvements
-
-## [0.5.3] - 2024-08-23
-### Changed
-- Incremented version number to 0.5.3
-- Minor bug fixes and performance improvements
-- Updated documentation
-
-## [0.5.2] - 2024-08-22
-### Changed
-- Updated PyPI package configuration
-- Incremented version number to 0.4.7 in all relevant files
-- Enhanced documentation in README.md
-- Ensured version consistency across the package
-- Improved error handling and logging
-- Updated installation and usage instructions
 
 [All previous changelog entries remain unchanged]
