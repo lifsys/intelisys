@@ -32,6 +32,12 @@ from pydantic import BaseModel, ValidationError
 from functools import lru_cache
 import PyPDF2
 from bs4 import BeautifulSoup
+import xml.etree.ElementTree as ET
+from pptx import Presentation
+from openpyxl import load_workbook
+from docx import Document
+import email
+import chardet
 
 # Define the log format
 DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
@@ -710,12 +716,14 @@ class Intelisys:
             self.logger.error(f"Error during transcription: {str(e)}")
             raise
 
-    def reference(self, source: str) -> 'Intelisys':
+    def reference(self, source: str, sheet_name: str = None, sheet_index: int = None) -> 'Intelisys':
         """
-        Add content from a URL, file, or PDF to the system message.
+        Add content from a URL, file, or various document types to the system message.
 
         Args:
             source (str): URL or file path to the reference content.
+            sheet_name (str, optional): Name of the sheet to read for Excel files.
+            sheet_index (int, optional): Index of the sheet to read for Excel files (0-based).
 
         Returns:
             self: The Intelisys instance for method chaining.
@@ -728,10 +736,12 @@ class Intelisys:
         try:
             if source.startswith(('http://', 'https://')):
                 content = self._fetch_url_content(source)
-            elif source.lower().endswith('.pdf'):
-                content = self._read_pdf_content(source)
             else:
-                content = self._read_file_content(source)
+                file_extension = os.path.splitext(source)[1].lower()
+                if file_extension in ['.xls', '.xlsx']:
+                    content = self._read_excel_content(source, sheet_name, sheet_index)
+                else:
+                    content = self._read_file_content(source)
 
             # Truncate content if it's too long
             max_words = 10000  # Adjust this value as needed
@@ -760,11 +770,131 @@ class Intelisys:
         return ' '.join(soup.stripped_strings)
 
     def _read_file_content(self, filepath: str) -> str:
-        """Read content from a file."""
+        """Read content from various file types."""
         if not os.path.exists(filepath):
             raise FileNotFoundError(f"File not found: {filepath}")
-        with open(filepath, 'r', encoding='utf-8') as file:
-            return file.read()
+        
+        file_extension = os.path.splitext(filepath)[1].lower()
+        
+        if file_extension == '.pdf':
+            return self._read_pdf_content(filepath)
+        elif file_extension == '.ppt' or file_extension == '.pptx':
+            return self._read_ppt_content(filepath)
+        elif file_extension == '.xls' or file_extension == '.xlsx':
+            return self._read_excel_content(filepath)
+        elif file_extension == '.xml':
+            return self._read_xml_content(filepath)
+        elif file_extension == '.doc' or file_extension == '.docx':
+            return self._read_doc_content(filepath)
+        elif file_extension == '.eml':
+            return self._read_eml_content(filepath)
+        else:
+            # For text files, try different encodings
+            encodings = ['utf-8', 'latin-1', 'ascii']
+            for encoding in encodings:
+                try:
+                    with open(filepath, 'r', encoding=encoding) as file:
+                        return file.read()
+                except UnicodeDecodeError:
+                    continue
+            
+            # If all encodings fail, raise an error
+            raise ValueError(f"Unable to read file {filepath} with any of the attempted encodings")
+
+    def _read_pdf_content(self, filepath: str) -> str:
+        """Read content from a PDF file."""
+        with open(filepath, 'rb') as file:
+            reader = PyPDF2.PdfReader(file)
+            content = []
+            for page in reader.pages:
+                content.append(page.extract_text())
+            return ' '.join(content)
+
+    def _read_ppt_content(self, filepath: str) -> str:
+        """Read content from a PowerPoint file."""
+        prs = Presentation(filepath)
+        content = []
+        for slide in prs.slides:
+            for shape in slide.shapes:
+                if hasattr(shape, 'text'):
+                    content.append(shape.text)
+        return ' '.join(content)
+
+    def _read_excel_content(self, filepath: str, sheet_name: str = None, sheet_index: int = None) -> str:
+        """
+        Read content from an Excel file.
+
+        Args:
+            filepath (str): Path to the Excel file.
+            sheet_name (str, optional): Name of the sheet to read. If None, reads the active sheet.
+            sheet_index (int, optional): Index of the sheet to read (0-based). If provided, overrides sheet_name.
+
+        Returns:
+            str: Content of the specified sheet.
+        """
+        wb = load_workbook(filepath, read_only=True, data_only=True)
+        
+        if sheet_index is not None:
+            if 0 <= sheet_index < len(wb.sheetnames):
+                sheet = wb.worksheets[sheet_index]
+            else:
+                raise ValueError(f"Sheet index {sheet_index} is out of range. The workbook has {len(wb.sheetnames)} sheets.")
+        elif sheet_name:
+            if sheet_name in wb.sheetnames:
+                sheet = wb[sheet_name]
+            else:
+                raise ValueError(f"Sheet '{sheet_name}' not found in the workbook. Available sheets are: {', '.join(wb.sheetnames)}")
+        else:
+            sheet = wb.active
+
+        content = []
+        for row in sheet.iter_rows(values_only=True):
+            content.extend(str(cell) for cell in row if cell is not None)
+        
+        return ' '.join(content)
+
+    def _read_xml_content(self, filepath: str) -> str:
+        """Read content from an XML file."""
+        tree = ET.parse(filepath)
+        return ET.tostring(tree.getroot(), encoding='unicode', method='text')
+
+    def _read_doc_content(self, filepath: str) -> str:
+        """Read content from a Word document."""
+        doc = Document(filepath)
+        return ' '.join(paragraph.text for paragraph in doc.paragraphs)
+
+    def _read_eml_content(self, filepath: str) -> str:
+        """Read content from an EML file."""
+        with open(filepath, 'rb') as file:
+            raw_content = file.read()
+        
+        # Detect the encoding
+        detected = chardet.detect(raw_content)
+        encoding = detected['encoding'] or 'utf-8'
+        
+        try:
+            msg = email.message_from_bytes(raw_content)
+            content = []
+            if msg.is_multipart():
+                for part in msg.walk():
+                    if part.get_content_type() == "text/plain":
+                        payload = part.get_payload(decode=True)
+                        try:
+                            decoded = payload.decode(encoding)
+                        except UnicodeDecodeError:
+                            decoded = payload.decode(errors='replace')
+                        content.append(decoded)
+            else:
+                payload = msg.get_payload(decode=True)
+                try:
+                    decoded = payload.decode(encoding)
+                except UnicodeDecodeError:
+                    decoded = payload.decode(errors='replace')
+                content.append(decoded)
+            return ' '.join(content)
+        except Exception as e:
+            self.logger.error(f"Error reading EML file: {str(e)}")
+            return f"Error reading EML file: {str(e)}"
 
     def _read_pdf_content(self, source: Union[str, io.BytesIO]) -> str:
         """Read content from a PDF file."""
@@ -779,6 +909,92 @@ class Intelisys:
         except Exception as e:
             self.logger.error(f"Error reading PDF: {str(e)}")
             raise ValueError(f"Failed to read PDF: {str(e)}")
+
+    def _read_ppt_content(self, filepath: str) -> str:
+        """Read content from a PowerPoint file."""
+        prs = Presentation(filepath)
+        content = []
+        for slide in prs.slides:
+            for shape in slide.shapes:
+                if hasattr(shape, 'text'):
+                    content.append(shape.text)
+        return ' '.join(content)
+
+    def _read_excel_content(self, filepath: str, sheet_name: str = None, sheet_index: int = None) -> str:
+        """
+        Read content from an Excel file.
+
+        Args:
+            filepath (str): Path to the Excel file.
+            sheet_name (str, optional): Name of the sheet to read. If None, reads the active sheet.
+            sheet_index (int, optional): Index of the sheet to read (0-based). If provided, overrides sheet_name.
+
+        Returns:
+            str: Content of the specified sheet.
+        """
+        wb = load_workbook(filepath, read_only=True, data_only=True)
+        
+        if sheet_index is not None:
+            if 0 <= sheet_index < len(wb.sheetnames):
+                sheet = wb.worksheets[sheet_index]
+            else:
+                raise ValueError(f"Sheet index {sheet_index} is out of range. The workbook has {len(wb.sheetnames)} sheets.")
+        elif sheet_name:
+            if sheet_name in wb.sheetnames:
+                sheet = wb[sheet_name]
+            else:
+                raise ValueError(f"Sheet '{sheet_name}' not found in the workbook. Available sheets are: {', '.join(wb.sheetnames)}")
+        else:
+            sheet = wb.active
+
+        content = []
+        for row in sheet.iter_rows(values_only=True):
+            content.extend(str(cell) for cell in row if cell is not None)
+        
+        return ' '.join(content)
+
+    def _read_xml_content(self, filepath: str) -> str:
+        """Read content from an XML file."""
+        tree = ET.parse(filepath)
+        return ET.tostring(tree.getroot(), encoding='unicode', method='text')
+
+    def _read_doc_content(self, filepath: str) -> str:
+        """Read content from a Word document."""
+        doc = Document(filepath)
+        return ' '.join(paragraph.text for paragraph in doc.paragraphs)
+
+    def _read_eml_content(self, filepath: str) -> str:
+        """Read content from an EML file."""
+        with open(filepath, 'rb') as file:
+            raw_content = file.read()
+        
+        # Detect the encoding
+        detected = chardet.detect(raw_content)
+        encoding = detected['encoding'] or 'utf-8'
+        
+        try:
+            msg = email.message_from_bytes(raw_content)
+            content = []
+            if msg.is_multipart():
+                for part in msg.walk():
+                    if part.get_content_type() == "text/plain":
+                        payload = part.get_payload(decode=True)
+                        try:
+                            decoded = payload.decode(encoding)
+                        except UnicodeDecodeError:
+                            decoded = payload.decode(errors='replace')
+                        content.append(decoded)
+            else:
+                payload = msg.get_payload(decode=True)
+                try:
+                    decoded = payload.decode(encoding)
+                except UnicodeDecodeError:
+                    decoded = payload.decode(errors='replace')
+                content.append(decoded)
+            return ' '.join(content)
+        except Exception as e:
+            self.logger.error(f"Error reading EML file: {str(e)}")
+            return f"Error reading EML file: {str(e)}"
 
     @contextmanager
     def template_context(self, template: Optional[str] = None, persona: Optional[str] = None):

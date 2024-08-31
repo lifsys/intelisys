@@ -1,0 +1,41 @@
+# Core dependencies
+requests
+pillow
+anthropic
+jinja2
+openai
+termcolor
+pydantic
+PyPDF2
+beautifulsoup4
+chardet
+
+# New dependencies for additional file types
+python-pptx
+openpyxl
+python-docx
+
+# Optional: for better performance with BeautifulSoup
+lxml
+
+# Optional: for secure password storage (if used)
+onepasswordconnectsdk
+
+# Optional: for async operations (if used)
+aiohttp
+
+# Optional: for Excel file support (already included in openpyxl, but listed for clarity)
+et-xmlfile
+
+# Optional: for better JSON handling (if used)
+ujson
+
+# Optional: for advanced logging (if used)
+structlog
+
+# Optional: for type checking (recommended for development)
+mypy
+
+# Optional: for testing (recommended for development)
+pytest
+pytest-asyncio
