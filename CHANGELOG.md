@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.8] - 2024-09-01
+### Added
+- Significantly enhanced `max_history_words` functionality for superior conversation management
+- Improved support for handling large conversation histories
+
+### Changed
+- Greatly improved efficiency of history trimming, resulting in optimized memory usage
+- Further refined performance optimizations for long-running conversations
+
+### Fixed
+- Enhanced error handling and logging for more robust operations
+- Various minor bug fixes and code optimizations
+
 ## [0.5.7] - 2024-08-31
 ### Added
 - Support for Python 3.12

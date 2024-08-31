@@ -2,14 +2,14 @@
 
 Welcome to Intelisys, a powerful and versatile AI assistant library that provides a unified interface for interacting with various AI models and providers. Intelisys is designed to make AI integration seamless and efficient for developers of all levels.
 
-## What's New in Version 0.5.7
+## What's New in Version 0.5.8
 
-- Further optimized `max_history_words` functionality for improved conversation management
-- Enhanced efficiency of history trimming for better memory usage
-- Improved asynchronous support with more robust error handling
-- Refined structured output support with OpenAI provider using Pydantic models
-- Optimized performance for long-running conversations
-- Updated compatibility to support Python 3.12
+- Significantly enhanced `max_history_words` functionality for superior conversation management
+- Greatly improved efficiency of history trimming, resulting in optimized memory usage
+- Further refined performance optimizations for long-running conversations
+- Enhanced support for handling large conversation histories
+- Improved error handling and logging for robust operations
+- Minor bug fixes and code optimizations
 
 ## Key Features
 
