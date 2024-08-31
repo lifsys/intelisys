@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "intelisys"
-version = "0.5.6"
-description = "Intelligence/AI services for the Lifsys Enterprise with enhanced max_history_words, efficient history trimming, and improved document processing"
+version = "0.5.7"
+description = "Intelligence/AI services for the Lifsys Enterprise with optimized max_history_words, efficient history trimming, and improved async support"
 readme = "README.md"
 authors = [{name = "Lifsys Enterprise", email = "contact@lifsys.com"}]
 license = {file = "LICENSE"}
@@ -21,8 +21,9 @@ classifiers = [
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
 ]
-keywords = ["ai", "intelligence", "openai", "anthropic", "google", "groq", "openrouter", "document processing"]
+keywords = ["ai", "intelligence", "openai", "anthropic", "google", "groq", "openrouter", "async", "history management"]
 dependencies = [
     "openai>=1.0.0",
     "jinja2>=3.0.0",

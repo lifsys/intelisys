@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.7] - 2024-08-31
+### Added
+- Support for Python 3.12
+- Enhanced efficiency in max_history_words functionality
+- Improved async support with more robust error handling
+
+### Changed
+- Further optimized history trimming for better memory management
+- Refined structured output support for OpenAI provider
+- Updated documentation to reflect latest features and optimizations
+
+### Fixed
+- Minor bug fixes in async operations
+- Improved error handling in API requests
+
 ## [0.5.6] - 2024-08-27
 ### Added
 - Enhanced support for various document types in reference method (PDF, Word, Excel, PowerPoint)
